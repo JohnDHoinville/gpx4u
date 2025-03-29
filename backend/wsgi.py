@@ -8,18 +8,9 @@ load_dotenv()
 from server import app
 
 if __name__ == '__main__':
-    # Determine port from environment variable or use default
-    port = int(os.environ.get('PORT', 5001))
-    
-    # In development, use localhost
-    # In production, bind to all interfaces (0.0.0.0) for Render
-    host = 'localhost' if os.environ.get('FLASK_ENV') == 'development' else '0.0.0.0'
-    
-    # Debug mode should only be enabled in development
-    debug = os.environ.get('FLASK_ENV') == 'development'
-    
+    port = 5001  # Match React configuration
     app.run(
-        host=host,
+        host='localhost',
         port=port,
-        debug=debug
+        debug=True
     )

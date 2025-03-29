@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, session, send_from_directory
+from flask import Flask, request, jsonify, session
 from flask_cors import CORS
 from dotenv import load_dotenv
 import tempfile
@@ -60,16 +60,14 @@ CORS(app,
     expose_headers=["Content-Type", "Authorization", "Set-Cookie"],  # Add Set-Cookie
     allow_credentials=True)
 
-# Add debug logging for session in development
-if CONFIG.DEBUG:
-    @app.before_request
-    def log_request_info():
-        print('Headers:', dict(request.headers))
-        print('Session:', dict(session))
-        print('Cookies:', dict(request.cookies))
+# Add debug logging for session
+@app.before_request
+def log_request_info():
+    print('Headers:', dict(request.headers))
+    print('Session:', dict(session))
+    print('Cookies:', dict(request.cookies))
 
-# Use the database adapter
-db = RunDatabaseAdapter()
+db = RunDatabase()
 
 def login_required(f):
     @wraps(f)
