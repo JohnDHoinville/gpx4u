@@ -67,7 +67,7 @@ def log_request_info():
     print('Session:', dict(session))
     print('Cookies:', dict(request.cookies))
 
-db = RunDatabase()
+db = RunDatabaseAdapter()
 
 def login_required(f):
     @wraps(f)
