@@ -5,7 +5,7 @@ services:
   - type: web
     name: run-analysis
     env: python
-    plan: starter # Use appropriate plan
+    plan: starter # Standard plan - $7/month
     buildCommand: chmod +x build.sh && ./build.sh
     startCommand: cd backend && gunicorn --workers 2 --bind 0.0.0.0:$PORT wsgi:app
     envVars:
@@ -29,7 +29,7 @@ services:
   # - type: web
   #   name: run-analysis-api
   #   env: python
-  #   plan: starter
+  #   plan: free
   #   buildCommand: pip install -r requirements.txt
   #   startCommand: cd backend && gunicorn --workers 2 --bind 0.0.0.0:$PORT wsgi:app
   #   envVars:
@@ -49,7 +49,7 @@ services:
   # - type: web
   #   name: run-analysis-frontend
   #   env: node
-  #   plan: starter
+  #   plan: free
   #   buildCommand: npm install && npm run build
   #   startCommand: npx serve -s build
   #   envVars:
@@ -60,4 +60,4 @@ services:
 databases:
   - name: run-analysis-db
     databaseName: run_analysis
-    plan: starter # Adjust according to needs 
+    plan: free # Updated to new Render plan 
