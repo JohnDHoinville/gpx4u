@@ -1,0 +1,63 @@
+# Render deployment configuration
+
+services:
+  # The combined web service (backend serving frontend)
+  - type: web
+    name: run-analysis
+    env: python
+    plan: starter # Use appropriate plan
+    buildCommand: chmod +x build.sh && ./build.sh
+    startCommand: cd backend && gunicorn --workers 2 --bind 0.0.0.0:$PORT wsgi:app
+    envVars:
+      - key: FLASK_APP
+        value: server.py
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true # Render will generate a random value for SECRET_KEY
+      - key: DATABASE_URL
+        fromDatabase:
+          name: run-analysis-db
+          property: connectionString
+      - key: FRONTEND_URL
+        # Will use the service URL itself
+        value: ${service.url}
+
+  # Alternatively, you could define separate services for backend and frontend
+  # Uncomment to use:
+  #
+  # - type: web
+  #   name: run-analysis-api
+  #   env: python
+  #   plan: starter
+  #   buildCommand: pip install -r requirements.txt
+  #   startCommand: cd backend && gunicorn --workers 2 --bind 0.0.0.0:$PORT wsgi:app
+  #   envVars:
+  #     - key: FLASK_APP
+  #       value: server.py
+  #     - key: FLASK_ENV
+  #       value: production
+  #     - key: SECRET_KEY
+  #       generateValue: true
+  #     - key: DATABASE_URL
+  #       fromDatabase:
+  #         name: run-analysis-db
+  #         property: connectionString
+  #     - key: FRONTEND_URL
+  #       value: https://run-analysis-frontend.onrender.com
+  #
+  # - type: web
+  #   name: run-analysis-frontend
+  #   env: node
+  #   plan: starter
+  #   buildCommand: npm install && npm run build
+  #   startCommand: npx serve -s build
+  #   envVars:
+  #     - key: REACT_APP_API_URL
+  #       value: https://run-analysis-api.onrender.com
+
+# Database
+databases:
+  - name: run-analysis-db
+    databaseName: run_analysis
+    plan: starter # Adjust according to needs 
