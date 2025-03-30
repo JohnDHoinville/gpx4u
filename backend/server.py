@@ -45,7 +45,9 @@ app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
     PERMANENT_SESSION_LIFETIME=3600,  # 1 hour
-    SESSION_COOKIE_NAME='running_session'  # Custom session cookie name
+    SESSION_COOKIE_NAME='running_session',  # Custom session cookie name
+    SESSION_COOKIE_DOMAIN=None,  # Allow the cookie to work on the same domain in production
+    SESSION_COOKIE_PATH='/'  # Ensure cookie is sent for all paths
 )
 
 # Set secret key from environment or generate a secure random key
@@ -98,16 +100,50 @@ def favicon():
         return send_from_directory(app.static_folder, 'favicon.ico')
     return '', 204  # Return no content if favicon doesn't exist
 
+@app.route('/static/<path:path>')
+def serve_static(path):
+    print(f"Requested static path: '{path}'")
+    static_path = os.path.join('static', path)
+    if os.path.exists(os.path.join(app.static_folder, static_path)):
+        return send_from_directory(app.static_folder, static_path)
+    return '', 404
+
+@app.route('/manifest.json')
+def manifest():
+    if os.path.exists(os.path.join(app.static_folder, 'manifest.json')):
+        return send_from_directory(app.static_folder, 'manifest.json')
+    return '', 404
+
+@app.route('/asset-manifest.json')
+def asset_manifest():
+    if os.path.exists(os.path.join(app.static_folder, 'asset-manifest.json')):
+        return send_from_directory(app.static_folder, 'asset-manifest.json')
+    return '', 404
+
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):
-    if path and os.path.exists(os.path.join(app.static_folder, path)):
+    print(f"Requested path: '{path}'")
+    print(f"Static folder: '{app.static_folder}'")
+    
+    # First, check if path is for a specific static file
+    if path and path != '' and os.path.exists(os.path.join(app.static_folder, path)):
+        print(f"Serving static file: {path}")
         return send_from_directory(app.static_folder, path)
-    elif os.path.exists(os.path.join(app.static_folder, 'index.html')):
+    
+    # Otherwise serve index.html for SPA routing
+    if os.path.exists(os.path.join(app.static_folder, 'index.html')):
+        print("Serving index.html for SPA")
         return send_from_directory(app.static_folder, 'index.html')
     else:
-        # If we're in development or static files aren't available, just show API info
-        return jsonify({'message': f'Server is running in {env} mode. Static files not found.'}), 200
+        print("Static files not found, returning API info")
+        # If static files aren't available, show API info
+        files_in_static = os.listdir(app.static_folder) if os.path.exists(app.static_folder) else []
+        return jsonify({
+            'message': f'Server is running in {env} mode. Static files not found.',
+            'static_folder': app.static_folder,
+            'files_in_static': files_in_static
+        }), 200
 
 @app.route('/analyze', methods=['POST'])
 @login_required
