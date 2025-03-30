@@ -61,32 +61,14 @@ class RunDatabaseAdapter:
     Database adapter with support for both SQLite and PostgreSQL
     """
     def __init__(self):
-        # Get the database URI - handle case where it's a property
-        db_uri = None
-        try:
-            # For properties, accessing the attribute will call the getter method
-            db_uri_value = CONFIG.DATABASE_URI
-            
-            # Convert to string if it's not None
-            if db_uri_value is not None:
-                db_uri = str(db_uri_value)
-            
-            print(f"Database URI: {db_uri}")
-        except Exception as e:
-            print(f"Error accessing DATABASE_URI: {e}")
-            db_uri = None
+        self.db_uri = CONFIG.DATABASE_URI
         
-        self.db_uri = db_uri
-        
-        # Now check if we should use SQLAlchemy (PostgreSQL)
-        if self.db_uri and isinstance(self.db_uri, str) and self.db_uri.startswith('postgresql'):
-            print(f"Using PostgreSQL database: {self.db_uri}")
+        if self.db_uri and self.db_uri.startswith('postgresql'):
             self.use_sqlalchemy = True
             self.engine = create_engine(self.db_uri)
             self.metadata = MetaData()
             self._setup_sqlalchemy_tables()
         else:
-            print(f"Using SQLite database (db_uri: {self.db_uri})")
             self.use_sqlalchemy = False
             self.db_name = 'runs.db'
             if not os.path.exists(self.db_name):

@@ -1,13 +1,5 @@
-from flask import Flask, request, jsonify, session, send_from_directory
-# Try to import CORS, but if it fails, we'll handle it
-try:
-    from flask_cors import CORS
-    has_flask_cors = True
-    print("Successfully imported flask_cors")
-except ImportError:
-    has_flask_cors = False
-    print("WARNING: flask_cors not available, CORS support will be disabled")
-
+from flask import Flask, request, jsonify, session
+from flask_cors import CORS
 from dotenv import load_dotenv
 import tempfile
 import os
@@ -59,27 +51,14 @@ app.config.update(
 # Set secret key from environment or generate a secure random key
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
-# Configure CORS if available
-if env == 'development' and has_flask_cors:
-    CORS(app,
-        origins=[CONFIG.FRONTEND_URL],
-        methods=["GET", "POST", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "Accept", "Cookie"],
-        supports_credentials=True,
-        expose_headers=["Content-Type", "Authorization", "Set-Cookie"],
-        allow_credentials=True)
-elif has_flask_cors:
-    # In production, the frontend is served from the same domain by Flask
-    # So we don't need CORS for the frontend, but we'll set it up for any external API calls
-    CORS(app,
-        origins=["*"],  # Allow all origins in prod as we're serving frontend from backend
-        methods=["GET", "POST", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "Accept", "Cookie"],
-        supports_credentials=True,
-        expose_headers=["Content-Type", "Authorization", "Set-Cookie"],
-        allow_credentials=True)
-else:
-    print("CORS support disabled due to missing flask_cors package")
+# Configure CORS
+CORS(app,
+    origins=[CONFIG.FRONTEND_URL],
+    methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Accept", "Cookie"],  # Add Cookie to allowed headers
+    supports_credentials=True,
+    expose_headers=["Content-Type", "Authorization", "Set-Cookie"],  # Add Set-Cookie
+    allow_credentials=True)
 
 # Add debug logging for session
 @app.before_request
