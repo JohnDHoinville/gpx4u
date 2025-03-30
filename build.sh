@@ -11,6 +11,10 @@ echo "Directory contents: $(ls -la)"
 echo "Installing Python dependencies..."
 pip install -r requirements.txt
 
+# Explicitly install Flask-CORS to ensure it's available
+echo "Explicitly installing Flask-CORS..."
+pip install Flask-CORS==4.0.0
+
 # Install frontend dependencies
 echo "Installing Node.js dependencies..."
 npm install
