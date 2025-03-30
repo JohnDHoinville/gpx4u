@@ -60,4 +60,5 @@ services:
 databases:
   - name: run-analysis-db
     databaseName: run_analysis
-    plan: free # Free PostgreSQL tier 
+    ipAllowList: [] # only allow internal connections
+    plan: small # Current free tier name for Postgres 
