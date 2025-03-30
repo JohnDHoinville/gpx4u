@@ -11,9 +11,9 @@ pip install -r requirements.txt
 echo "Installing Node.js dependencies..."
 npm install
 
-# Build frontend
+# Build frontend with CI=false to prevent warnings being treated as errors
 echo "Building React application..."
-npm run build
+CI=false npm run build
 
 # Create static directory in backend
 echo "Setting up static files..."

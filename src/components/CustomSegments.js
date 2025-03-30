@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Line } from 'react-chartjs-2';
 import './CustomSegments.css';
 
@@ -39,6 +39,34 @@ const CustomSegments = ({ runs, currentRun }) => {
     }
   };
 
+  // Wrap createDemoSegments in useCallback to avoid dependency issues
+  const createDemoSegments = useCallback(() => {
+    console.log("Creating demo segments");
+    const demoSegments = [
+      {
+        id: Date.now(),
+        name: "First Mile",
+        startDistance: 0,
+        endDistance: 1
+      },
+      {
+        id: Date.now() + 1,
+        name: "Last Mile",
+        startDistance: Math.max(0, Math.floor(currentRun?.total_distance || 3) - 1),
+        endDistance: Math.floor(currentRun?.total_distance || 3)
+      },
+      {
+        id: Date.now() + 2,
+        name: "Middle Section",
+        startDistance: 1,
+        endDistance: 2
+      }
+    ];
+    setSegments(demoSegments);
+    localStorage.setItem('customSegments', safeStringify(demoSegments));
+    console.log("Created and saved demo segments:", demoSegments);
+  }, [currentRun?.total_distance, safeStringify]);
+
   // Load saved segments from localStorage
   useEffect(() => {
     try {
@@ -63,7 +91,7 @@ const CustomSegments = ({ runs, currentRun }) => {
       console.error("Error loading segments:", error);
       createDemoSegments();
     }
-  }, [currentRun?.total_distance]);
+  }, [currentRun?.total_distance, createDemoSegments]);
 
   // Save segments to localStorage when they change
   useEffect(() => {
@@ -404,33 +432,6 @@ const CustomSegments = ({ runs, currentRun }) => {
       }
     }
   };
-  
-  // Helper function to create demo segments
-  const createDemoSegments = () => {
-    const demoSegments = [
-      {
-        id: Date.now(),
-        name: "First Mile",
-        startDistance: 0,
-        endDistance: 1
-      },
-      {
-        id: Date.now() + 1,
-        name: "Last Mile",
-        startDistance: Math.max(0, Math.floor(currentRun?.total_distance || 3) - 1),
-        endDistance: Math.floor(currentRun?.total_distance || 3)
-      },
-      {
-        id: Date.now() + 2,
-        name: "Middle Section",
-        startDistance: 1,
-        endDistance: 2
-      }
-    ];
-    setSegments(demoSegments);
-    localStorage.setItem('customSegments', safeStringify(demoSegments));
-    console.log("Created and saved demo segments:", demoSegments);
-  }
   
   return (
     <div className="custom-segments">
