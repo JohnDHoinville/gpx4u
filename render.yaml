@@ -5,7 +5,7 @@ services:
   - type: web
     name: run-analysis
     env: python
-    plan: starter # Standard plan - $7/month
+    plan: starter # Use appropriate plan
     buildCommand: chmod +x build.sh && ./build.sh
     startCommand: cd backend && gunicorn --workers 2 --bind 0.0.0.0:$PORT wsgi:app
     envVars:
@@ -60,5 +60,4 @@ services:
 databases:
   - name: run-analysis-db
     databaseName: run_analysis
-    ipAllowList: [] # only allow internal connections
-    plan: small # Current free tier name for Postgres 
+    plan: starter # Adjust according to needs 
