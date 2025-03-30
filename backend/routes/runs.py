@@ -4,12 +4,12 @@ import traceback
 import re
 import os
 from datetime import datetime
-from app.database import RunDatabase, safe_json_dumps
+from app.database_adapter import RunDatabaseAdapter, safe_json_dumps
 from app.running import analyze_run_file, calculate_vo2max, calculate_training_load, calculate_recovery_time
 import json
 
 runs_bp = Blueprint('runs_bp', __name__)
-db = RunDatabase()
+db = RunDatabaseAdapter()
 
 # Updated CustomJSONEncoder with comprehensive Infinity handling
 class CustomJSONEncoder(json.JSONEncoder):

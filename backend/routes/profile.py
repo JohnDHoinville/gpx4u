@@ -1,10 +1,10 @@
 from flask import Blueprint, request, jsonify, session
 import traceback
 from functools import wraps
-from app.database import RunDatabase
+from app.database_adapter import RunDatabaseAdapter
 
 profile_bp = Blueprint('profile_bp', __name__)
-db = RunDatabase()
+db = RunDatabaseAdapter()
 
 def login_required(f):
     @wraps(f)

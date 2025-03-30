@@ -1,10 +1,10 @@
 from flask import Blueprint, request, jsonify, session
 import traceback
-from app.database import RunDatabase
+from app.database_adapter import RunDatabaseAdapter
 from werkzeug.security import generate_password_hash, check_password_hash
 
 auth_bp = Blueprint('auth_bp', __name__)
-db = RunDatabase()
+db = RunDatabaseAdapter()
 
 @auth_bp.route('/auth/register', methods=['POST'])
 def register():

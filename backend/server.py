@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, session, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
 import tempfile
@@ -52,13 +52,24 @@ app.config.update(
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
 # Configure CORS
-CORS(app,
-    origins=[CONFIG.FRONTEND_URL],
-    methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Accept", "Cookie"],  # Add Cookie to allowed headers
-    supports_credentials=True,
-    expose_headers=["Content-Type", "Authorization", "Set-Cookie"],  # Add Set-Cookie
-    allow_credentials=True)
+if env == 'development':
+    CORS(app,
+        origins=[CONFIG.FRONTEND_URL],
+        methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Accept", "Cookie"],  # Add Cookie to allowed headers
+        supports_credentials=True,
+        expose_headers=["Content-Type", "Authorization", "Set-Cookie"],  # Add Set-Cookie
+        allow_credentials=True)
+else:
+    # In production, the frontend is served from the same domain by Flask
+    # So we don't need CORS for the frontend, but we'll set it up for any external API calls
+    CORS(app,
+        origins=["*"],  # Allow all origins in prod as we're serving frontend from backend
+        methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Accept", "Cookie"],
+        supports_credentials=True,
+        expose_headers=["Content-Type", "Authorization", "Set-Cookie"],
+        allow_credentials=True)
 
 # Add debug logging for session
 @app.before_request
@@ -80,6 +91,12 @@ def login_required(f):
 @app.route('/test', methods=['GET'])
 def test():
     return jsonify({'status': 'Backend server is running'}), 200
+
+@app.route('/favicon.ico')
+def favicon():
+    if os.path.exists(os.path.join(app.static_folder, 'favicon.ico')):
+        return send_from_directory(app.static_folder, 'favicon.ico')
+    return '', 204  # Return no content if favicon doesn't exist
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
