@@ -11,9 +11,9 @@ pip install -r requirements.txt
 echo "Installing Node.js dependencies..."
 npm install
 
-# Build frontend (ignoring warnings in CI)
+# Build frontend
 echo "Building React application..."
-DISABLE_ESLINT_PLUGIN=true npm run build
+npm run build
 
 # Create static directory in backend
 echo "Setting up static files..."
