@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Line } from 'react-chartjs-2';
+import { Line, Scatter } from 'react-chartjs-2';
 import 'chart.js/auto';  // Ensure all Chart.js components are registered
 import './PaceProgressChart.css';
 
