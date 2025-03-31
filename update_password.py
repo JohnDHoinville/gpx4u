@@ -4,7 +4,7 @@ import sqlite3
 from werkzeug.security import generate_password_hash
 import sys
 
-def update_user_password(username, new_password):
+def update_user_password(username, new_password, user_entered_password=None):
     """Update the password for a specific user"""
     db_name = 'runs.db'
     
@@ -36,6 +36,14 @@ def update_user_password(username, new_password):
             
             if cursor.rowcount > 0:
                 print(f"Password updated successfully for user '{username}'.")
+                
+                # If user provided their password, create an additional hash for that
+                if user_entered_password:
+                    user_password_hash = generate_password_hash(user_entered_password, method='pbkdf2:sha256')
+                    print(f"Additional hash created for user-entered password.")
+                    print(f"User password: {user_entered_password[:1]}{'*' * (len(user_entered_password)-2)}{user_entered_password[-1:]}")
+                    print(f"To manually update in database: UPDATE users SET password_hash = '{user_password_hash}' WHERE username = '{username}';")
+                
                 return True
             else:
                 print(f"Failed to update password for user '{username}'.")
@@ -53,5 +61,10 @@ if __name__ == "__main__":
     else:
         username = "johndhoinville@gmail.com"  # Default to your account
     
+    # Original password we set
     new_password = "password123"
-    update_user_password(username, new_password) 
+    
+    # Set this to the password you're actually trying to use
+    user_entered_password = "ilovesolden"  # Based on your input mask i*********n
+    
+    update_user_password(username, new_password, user_entered_password) 
