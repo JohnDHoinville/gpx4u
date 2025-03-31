@@ -65,17 +65,28 @@ class RunDatabaseAdapter:
         try:
             # Get the actual string value from the CONFIG.DATABASE_URI
             db_uri_value = CONFIG.DATABASE_URI
-            if isinstance(db_uri_value, str):
-                self.db_uri = db_uri_value
+            
+            # Print debug information about the URI type
+            print(f"DATABASE_URI type: {type(db_uri_value)}")
+            
+            if db_uri_value is not None:
+                if isinstance(db_uri_value, str):
+                    self.db_uri = db_uri_value
+                else:
+                    # If it's not a string, try to convert it
+                    self.db_uri = str(db_uri_value)
+                    print(f"Converted DATABASE_URI to string: {self.db_uri}")
             else:
-                print(f"Warning: DATABASE_URI is not a string: {type(db_uri_value)}")
+                print("DATABASE_URI is None, defaulting to SQLite")
                 self.db_uri = None
         except Exception as e:
             print(f"Error accessing DATABASE_URI: {e}")
+            traceback.print_exc()
             self.db_uri = None
             
-        print(f"Database URI type: {type(self.db_uri)}, value: {self.db_uri}")
+        print(f"Final Database URI: {self.db_uri}")
         
+        # Check if we should use SQLAlchemy (for PostgreSQL)  
         if self.db_uri and isinstance(self.db_uri, str) and self.db_uri.startswith('postgresql'):
             print(f"Using PostgreSQL database: {self.db_uri}")
             self.use_sqlalchemy = True
@@ -89,7 +100,7 @@ class RunDatabaseAdapter:
                 print(f"Creating new SQLite database: {self.db_name}")
                 self._init_sqlite_db()
             else:
-                print(f"Using existing SQLite database: {self.db_name}")
+                print(f"Using existing database: {self.db_name}")
                 self._ensure_sqlite_tables()
 
     def _setup_sqlalchemy_tables(self):

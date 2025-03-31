@@ -1,35 +1,102 @@
-from flask import Flask, request, jsonify, session
-from flask_cors import CORS
+from flask import Flask, request, jsonify, session, send_from_directory
+# Try to import CORS, but if it fails, we'll handle it
+try:
+    from flask_cors import CORS
+    has_flask_cors = True
+    print("Successfully imported flask_cors")
+except ImportError:
+    has_flask_cors = False
+    print("WARNING: flask_cors not available, CORS support will be disabled")
+
 from dotenv import load_dotenv
 import tempfile
 import os
-from app.database_adapter import RunDatabaseAdapter
-from app.running import analyze_run_file, calculate_pace_zones, analyze_elevation_impact
+import traceback
+import sys
 import json
 from datetime import datetime
 import re
 from functools import wraps
 import secrets
-import traceback
 from json import JSONEncoder
 from routes.auth import auth_bp
 from routes.runs import runs_bp
 from routes.profile import profile_bp
 from config import config
 
-# Use the custom encoder for all JSON responses
-class DateTimeEncoder(JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, datetime):
-            return obj.strftime('%Y-%m-%d %H:%M:%S')
-        return super().default(obj)
+# Add debugging and error handling
+def handle_exception(e):
+    """Print exception details to stderr for Render logs"""
+    print('=' * 80, file=sys.stderr)
+    print("Exception occurred:", file=sys.stderr)
+    print(str(e), file=sys.stderr)
+    print('-' * 80, file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
+    print('=' * 80, file=sys.stderr)
+    return str(e)
 
 # Load environment variables
 load_dotenv()
 
-# Determine the environment
+# Environment
 env = os.environ.get('FLASK_ENV', 'development')
-CONFIG = config[env]
+print(f"Starting Flask server in {env} mode...")
+
+# Import configuration - correct import path
+try:
+    from config import config
+    CONFIG = config[env]
+    print(f"Loaded config for environment: {env}")
+except Exception as e:
+    print("Error importing config:", handle_exception(e))
+    
+    # Create fallback config
+    class FallbackConfig:
+        def __init__(self):
+            self.SECRET_KEY = os.environ.get('SECRET_KEY', 'fallback-dev-key')
+            self.DATABASE_URI = os.environ.get('DATABASE_URL')
+            self.FRONTEND_URL = os.environ.get('FRONTEND_URL', '*')
+            self.DEBUG = env == 'development'
+    
+    CONFIG = FallbackConfig()
+    print("Using fallback configuration")
+
+# Import app modules - with better error handling
+try:
+    from app.running import analyze_run_file, calculate_pace_zones, analyze_elevation_impact
+    print("Successfully imported running module")
+except Exception as e:
+    print("Error importing running module:", handle_exception(e))
+    
+    # Create fallback functions if needed
+    def analyze_run_file(file_path):
+        return {"error": "Running analysis module not available"}
+    
+    def calculate_pace_zones(base_pace):
+        return {"error": "Pace zones calculation not available"}
+    
+    def analyze_elevation_impact(data):
+        return {"error": "Elevation impact analysis not available"}
+
+try:
+    from app.database_adapter import RunDatabaseAdapter, safe_json_dumps
+    print("Successfully imported database adapter")
+except Exception as e:
+    print("Error importing database adapter:", handle_exception(e))
+    
+    # Create fallback database adapter
+    class FallbackDatabaseAdapter:
+        def __init__(self):
+            print("Using fallback database adapter - limited functionality")
+        
+        def get_user_by_username(self, username):
+            return None
+            
+        def verify_password(self, user, password):
+            return False
+    
+    safe_json_dumps = json.dumps
+    RunDatabaseAdapter = FallbackDatabaseAdapter
 
 # Initialize Flask app with static folder
 static_folder = os.path.join(os.path.dirname(__file__), 'static')
@@ -45,20 +112,46 @@ app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
     PERMANENT_SESSION_LIFETIME=3600,  # 1 hour
-    SESSION_COOKIE_NAME='running_session'  # Custom session cookie name
+    SESSION_COOKIE_NAME='running_session',  # Custom session cookie name
+    SESSION_TYPE='filesystem'
 )
 
 # Set secret key from environment or generate a secure random key
-app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
+app.secret_key = CONFIG.SECRET_KEY
 
-# Configure CORS
-CORS(app,
-    origins=[CONFIG.FRONTEND_URL],
-    methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Accept", "Cookie"],  # Add Cookie to allowed headers
-    supports_credentials=True,
-    expose_headers=["Content-Type", "Authorization", "Set-Cookie"],  # Add Set-Cookie
-    allow_credentials=True)
+# Configure CORS if available
+try:
+    if env == 'development' and has_flask_cors:
+        CORS(app,
+            origins=[CONFIG.FRONTEND_URL],
+            methods=["GET", "POST", "DELETE", "OPTIONS"],
+            allow_headers=["Content-Type", "Accept", "Cookie"],
+            supports_credentials=True,
+            expose_headers=["Content-Type", "Authorization", "Set-Cookie"],
+            allow_credentials=True)
+    elif has_flask_cors:
+        # In production, the frontend is served from the same domain by Flask
+        # So we don't need CORS for the frontend, but we'll set it up for any external API calls
+        CORS(app,
+            origins=["*"],  # Allow all origins in prod as we're serving frontend from backend
+            methods=["GET", "POST", "DELETE", "OPTIONS"],
+            allow_headers=["Content-Type", "Accept", "Cookie"],
+            supports_credentials=True,
+            expose_headers=["Content-Type", "Authorization", "Set-Cookie"],
+            allow_credentials=True)
+    else:
+        print("CORS support disabled due to missing flask_cors package")
+except Exception as e:
+    print("Error configuring CORS:", handle_exception(e))
+
+# Initialize database
+try:
+    db = RunDatabaseAdapter()
+    print("Successfully initialized database")
+except Exception as e:
+    print("Error initializing database:", handle_exception(e))
+    # Create a minimal db instance to avoid errors later
+    db = FallbackDatabaseAdapter()
 
 # Add debug logging for session
 @app.before_request
@@ -66,8 +159,6 @@ def log_request_info():
     print('Headers:', dict(request.headers))
     print('Session:', dict(session))
     print('Cookies:', dict(request.cookies))
-
-db = RunDatabaseAdapter()
 
 def login_required(f):
     @wraps(f)
@@ -84,13 +175,17 @@ def test():
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):
-    if path and os.path.exists(os.path.join(app.static_folder, path)):
-        return send_from_directory(app.static_folder, path)
-    elif os.path.exists(os.path.join(app.static_folder, 'index.html')):
-        return send_from_directory(app.static_folder, 'index.html')
-    else:
-        # If we're in development or static files aren't available, just show API info
-        return jsonify({'message': f'Server is running in {env} mode. Static files not found.'}), 200
+    try:
+        if path and os.path.exists(os.path.join(app.static_folder, path)):
+            return send_from_directory(app.static_folder, path)
+        elif os.path.exists(os.path.join(app.static_folder, 'index.html')):
+            return send_from_directory(app.static_folder, 'index.html')
+        else:
+            # If we're in development or static files aren't available, just show API info
+            return jsonify({'message': f'Server is running in {env} mode. Static files not found.'}), 200
+    except Exception as e:
+        error_msg = handle_exception(e)
+        return jsonify({'error': f"Error serving path '{path}': {error_msg}"}), 500
 
 @app.route('/analyze', methods=['POST'])
 @login_required
@@ -309,10 +404,25 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(runs_bp)
 app.register_blueprint(profile_bp)
 
+# Add a health check endpoint
+@app.route('/api/health')
+def health_check():
+    try:
+        return jsonify({
+            'status': 'ok',
+            'environment': env,
+            'database_type': 'SQLAlchemy' if hasattr(db, 'use_sqlalchemy') and db.use_sqlalchemy else 'SQLite',
+            'has_flask_cors': has_flask_cors
+        })
+    except Exception as e:
+        error_msg = handle_exception(e)
+        return jsonify({'error': error_msg}), 500
+
+# Start server if run directly
 if __name__ == '__main__':
     print("Starting server on http://localhost:5001")
     app.run(
-        debug=True,
+        debug=env == 'development',
         host='localhost',
         port=5001,
         ssl_context=None
