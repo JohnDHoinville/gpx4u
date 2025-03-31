@@ -23,6 +23,8 @@ from routes.auth import auth_bp
 from routes.runs import runs_bp
 from routes.profile import profile_bp
 from config import config
+import sqlite3
+from sqlalchemy import select, func
 
 # Use the custom encoder for all JSON responses
 class DateTimeEncoder(JSONEncoder):
@@ -474,6 +476,103 @@ def health_check():
             'database_type': 'SQLAlchemy' if hasattr(db, 'use_sqlalchemy') and db.use_sqlalchemy else 'SQLite',
             'has_flask_cors': has_flask_cors
         })
+    except Exception as e:
+        error_msg = handle_exception(e)
+        return jsonify({'error': error_msg}), 500
+
+# Add a admin-only endpoint to list users (temporary for debugging)
+@app.route('/admin/list-accounts', methods=['GET'])
+def admin_list_accounts():
+    try:
+        # Check for admin authorization (only allow admin user)
+        if 'user_id' not in session:
+            return jsonify({'error': 'Not authenticated'}), 401
+            
+        # Get the current user's info
+        user_id = session['user_id']
+        
+        # Verify this is the admin user
+        if user_id != 1:  # Admin user ID is typically 1
+            return jsonify({'error': 'Not authorized'}), 403
+            
+        # Get all users from the database
+        if db.use_sqlalchemy:
+            with db.engine.connect() as conn:
+                # For PostgreSQL (SQLAlchemy)
+                result = conn.execute(
+                    select([db.users.c.id, db.users.c.username, db.users.c.created_at])
+                )
+                users = [
+                    {"id": row[0], "username": row[1], "created_at": row[2]} 
+                    for row in result
+                ]
+                
+                # Also get profile data
+                profiles = {}
+                for user in users:
+                    profile_result = conn.execute(
+                        select([db.profile]).where(db.profile.c.user_id == user["id"])
+                    )
+                    profile = profile_result.fetchone()
+                    if profile:
+                        profiles[user["id"]] = {
+                            "age": profile.age,
+                            "resting_hr": profile.resting_hr,
+                            "weight": profile.weight,
+                            "gender": "Male" if profile.gender == 1 else "Female"
+                        }
+                
+                # Add run counts
+                for user in users:
+                    run_count_result = conn.execute(
+                        select([func.count()]).select_from(db.runs).where(db.runs.c.user_id == user["id"])
+                    )
+                    user["run_count"] = run_count_result.scalar() or 0
+                    user["profile"] = profiles.get(user["id"], {})
+        else:
+            # For SQLite
+            with sqlite3.connect('runs.db') as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                
+                # Get all users
+                cursor.execute('''
+                    SELECT u.id, u.username, u.created_at
+                    FROM users u
+                    ORDER BY u.id
+                ''')
+                users = [dict(row) for row in cursor.fetchall()]
+                
+                # Get profiles and run counts
+                for user in users:
+                    # Get profile
+                    cursor.execute('''
+                        SELECT age, resting_hr, weight, gender
+                        FROM profile
+                        WHERE user_id = ?
+                    ''', (user["id"],))
+                    profile = cursor.fetchone()
+                    if profile:
+                        user["profile"] = {
+                            "age": profile["age"],
+                            "resting_hr": profile["resting_hr"],
+                            "weight": profile["weight"],
+                            "gender": "Male" if profile["gender"] == 1 else "Female"
+                        }
+                    else:
+                        user["profile"] = {}
+                    
+                    # Get run count
+                    cursor.execute('SELECT COUNT(*) FROM runs WHERE user_id = ?', (user["id"],))
+                    user["run_count"] = cursor.fetchone()[0]
+        
+        return jsonify({
+            "users": users,
+            "environment": env,
+            "database_type": "SQLAlchemy" if db.use_sqlalchemy else "SQLite",
+            "message": "This is a temporary endpoint for debugging purposes. Please remove in production."
+        })
+        
     except Exception as e:
         error_msg = handle_exception(e)
         return jsonify({'error': error_msg}), 500
