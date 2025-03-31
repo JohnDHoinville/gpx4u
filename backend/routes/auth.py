@@ -160,4 +160,16 @@ def change_password():
     except Exception as e:
         print(f"Password change error: {str(e)}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500 
+        return jsonify({'error': str(e)}), 500
+
+
+@auth_bp.route('/auth/login', methods=['OPTIONS'])
+@auth_bp.route('/auth/register', methods=['OPTIONS'])
+@auth_bp.route('/auth/logout', methods=['OPTIONS'])
+@auth_bp.route('/auth/check', methods=['OPTIONS'])
+def auth_options():
+    response = jsonify({'status': 'ok'})
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Accept, Cookie')
+    return response 

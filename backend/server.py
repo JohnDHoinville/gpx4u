@@ -153,14 +153,15 @@ try:
             allow_credentials=True)
     elif has_flask_cors:
         # In production, the frontend is served from the same domain by Flask
-        # So we don't need CORS for the frontend, but we'll set it up for any external API calls
+        # Allow all origins since we're using the same domain
         CORS(app,
-            origins=["*"],  # Allow all origins in prod as we're serving frontend from backend
+            origins=["*"],
             methods=["GET", "POST", "DELETE", "OPTIONS"],
             allow_headers=["Content-Type", "Accept", "Cookie"],
             supports_credentials=True,
             expose_headers=["Content-Type", "Authorization", "Set-Cookie"],
             allow_credentials=True)
+        print("Production CORS configured to allow all origins")
     else:
         print("CORS support disabled due to missing flask_cors package")
 except Exception as e:
@@ -205,6 +206,16 @@ def serve(path):
     try:
         print(f"Serving path: '{path}'")
         
+        # Check if path starts with /auth or /api - direct to proper route handlers
+        if path.startswith('auth/') or path.startswith('api/'):
+            print(f"API path detected: {path} - This should be handled by other routes")
+            # Let other routes handle this
+            # Flask will move on if this route doesn't return
+            return jsonify({
+                'error': 'Not found - path conflicts with API routes',
+                'path': path
+            }), 404
+            
         # For the root path, serve index.html
         if not path:
             print("Serving index.html for root path")
@@ -228,49 +239,9 @@ def serve(path):
             dir_path = os.path.dirname(full_path)
             file_name = os.path.basename(full_path)
             return send_from_directory(dir_path, file_name)
-            
-        # Check if file exists in static/js or static/css
-        if path.endswith('.js'):
-            js_path = os.path.join(static_folder, 'static', 'js', path)
-            if os.path.exists(js_path):
-                print(f"Serving JS file: {path}")
-                return send_from_directory(os.path.join(static_folder, 'static', 'js'), path)
-                
-        if path.endswith('.css'):
-            css_path = os.path.join(static_folder, 'static', 'css', path)
-            if os.path.exists(css_path):
-                print(f"Serving CSS file: {path}")
-                return send_from_directory(os.path.join(static_folder, 'static', 'css'), path)
-        
-        # Special case for main.[hash].js and main.[hash].css files
-        if path.startswith('main.') and path.endswith('.js'):
-            # Look for any main.*.js file in static/js
-            js_dir = os.path.join(static_folder, 'static', 'js')
-            if os.path.exists(js_dir):
-                for file in os.listdir(js_dir):
-                    if file.startswith('main.') and file.endswith('.js'):
-                        print(f"Found main JS file: {file}")
-                        return send_from_directory(js_dir, file)
-                        
-        if path.startswith('main.') and path.endswith('.css'):
-            # Look for any main.*.css file in static/css
-            css_dir = os.path.join(static_folder, 'static', 'css')
-            if os.path.exists(css_dir):
-                for file in os.listdir(css_dir):
-                    if file.startswith('main.') and file.endswith('.css'):
-                        print(f"Found main CSS file: {file}")
-                        return send_from_directory(css_dir, file)
-        
-        # Debugging - list content of static folder
-        print(f"Could not find file: {path}")
-        print(f"Static folder contents:")
-        for root, dirs, files in os.walk(static_folder):
-            for file in files:
-                rel_path = os.path.relpath(os.path.join(root, file), static_folder)
-                print(f"  {rel_path}")
         
         # For all other paths, serve index.html to support SPA routing
-        print(f"Path '{path}' not found as static file, serving index.html")
+        print(f"Path '{path}' not found as static file, serving index.html for SPA routing")
         return send_from_directory(static_folder, 'index.html')
     except Exception as e:
         error_msg = handle_exception(e)

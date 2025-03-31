@@ -10,13 +10,15 @@ if (process.env.REACT_APP_API_URL) {
   
   if (isProduction) {
     // For production deployment on Render
-    // This assumes backend and frontend are deployed to the same domain
-    // with backend at the /api path
-    API_URL = window.location.origin + '/api';
+    // In production, the backend serves the frontend from the same origin
+    // So we use relative URLs which will be handled by the server
+    API_URL = '';
   } else {
     // For local development
     API_URL = 'http://localhost:5001';
   }
 }
+
+console.log('API URL configured as:', API_URL);
 
 export { API_URL }; 
