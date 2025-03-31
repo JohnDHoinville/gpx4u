@@ -24,6 +24,12 @@ echo "Creating .env.development.local..."
 echo "DISABLE_ESLINT_PLUGIN=true" > .env.development.local
 echo "SKIP_PREFLIGHT_CHECK=true" >> .env.development.local
 echo "CI=false" >> .env.development.local
+echo "PUBLIC_URL=." >> .env.development.local
+
+# Fix hardcoded API_URL in App.js
+echo "Fixing hardcoded API_URL in App.js..."
+chmod +x fix_api_url.sh
+./fix_api_url.sh
 
 # Build frontend with CI=false and DISABLE_ESLINT_PLUGIN=true to prevent warnings being treated as errors
 echo "Building React application..."
