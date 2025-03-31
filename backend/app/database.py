@@ -359,25 +359,49 @@ class RunDatabase:
             return profile
 
     def create_user(self, username, password):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            password_hash = generate_password_hash(password, method='sha256')
-            cursor.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)',
-                          (username, password_hash))
-            user_id = cursor.lastrowid
-            cursor.execute('INSERT INTO profile (user_id, age, resting_hr) VALUES (?, 0, 0)',
-                          (user_id,))
-            conn.commit()
-            return user_id
+        """Create a new user"""
+        try:
+            # Use pbkdf2:sha256 instead of sha256 for better compatibility
+            password_hash = generate_password_hash(password, method='pbkdf2:sha256')
+            
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                # Check if username already exists
+                cursor.execute('SELECT id FROM users WHERE username = ?', (username,))
+                if cursor.fetchone():
+                    raise ValueError("Username already exists")
+                    
+                # Insert new user
+                cursor.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)', 
+                              (username, password_hash))
+                user_id = cursor.lastrowid
+                
+                # Create default profile for the user
+                cursor.execute('INSERT INTO profile (user_id, age, resting_hr, weight, gender) VALUES (?, 0, 0, 70, 1)', 
+                              (user_id,))
+                
+                conn.commit()
+                return user_id
+        except Exception as e:
+            print(f"Error creating user: {e}")
+            traceback.print_exc()
+            raise
 
     def verify_user(self, username, password):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT id, password_hash FROM users WHERE username = ?', (username,))
-            result = cursor.fetchone()
-            if result and check_password_hash(result[1], password):
-                return result[0]  # Return user_id
-            return None 
+        """Verify a user's credentials"""
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute('SELECT id, password_hash FROM users WHERE username = ?', (username,))
+                result = cursor.fetchone()
+                
+                if result and check_password_hash(result[1], password):
+                    return result[0]  # Return user_id if password matches
+                return None  # Return None if user not found or password doesn't match
+        except Exception as e:
+            print(f"Error verifying user: {e}")
+            traceback.print_exc()
+            return None
 
     def update_password(self, user_id, current_password, new_password):
         with sqlite3.connect(self.db_name) as conn:
