@@ -130,18 +130,16 @@ print(f"Starting Flask server in {env} mode with static url path: ''")
 # Use the custom encoder for all JSON responses
 app.json_encoder = DateTimeEncoder
 
-# Configure session
+# Configure Flask app
+app.secret_key = CONFIG.SECRET_KEY
 app.config.update(
-    SESSION_COOKIE_SECURE=CONFIG.SESSION_COOKIE_SECURE,
+    SESSION_COOKIE_SECURE=False,  # Set to True only in production with HTTPS
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
     PERMANENT_SESSION_LIFETIME=3600,  # 1 hour
     SESSION_COOKIE_NAME='running_session',  # Custom session cookie name
     SESSION_TYPE='filesystem'
 )
-
-# Set secret key from environment or generate a secure random key
-app.secret_key = CONFIG.SECRET_KEY
 
 # Configure CORS if available
 try:
@@ -177,12 +175,17 @@ except Exception as e:
     # Create a minimal db instance to avoid errors later
     db = FallbackDatabaseAdapter()
 
-# Add debug logging for session
+# Session debugging
 @app.before_request
-def log_request_info():
-    print('Headers:', dict(request.headers))
-    print('Session:', dict(session))
-    print('Cookies:', dict(request.cookies))
+def before_request():
+    print(f"\n=== REQUEST: {request.method} {request.path} ===")
+    print(f"Current session: {dict(session)}")
+
+@app.after_request
+def after_request(response):
+    print(f"=== RESPONSE: {response.status_code} ===")
+    print(f"Session after request: {dict(session)}")
+    return response
 
 def login_required(f):
     @wraps(f)
