@@ -32,29 +32,48 @@ def register():
 @auth_bp.route('/auth/login', methods=['POST'])
 def login():
     try:
-        print("\nReceived login request")
+        print("\n=== LOGIN ATTEMPT ===")
         data = request.json
         username = data.get('username')
         password = data.get('password')
         print(f"Login attempt for user: {username}")
         
+        # Add detailed debugging
+        print(f"Password provided: {password[:1]}{'*' * (len(password)-2)}{password[-1:] if len(password) > 1 else ''}")
+        
+        # Check session before login
+        print(f"Session before login: {dict(session)}")
+        
         user_id = db.verify_user(username, password)
+        print(f"Verify user result: {user_id}")
+        
         if user_id:
             session['user_id'] = user_id
+            session['logged_in'] = True  # Add an explicit logged_in flag
             session.modified = True  # Ensure session is saved
-            print(f"\nLogin successful:")
-            print(f"User ID: {user_id}")
-            print(f"Session: {dict(session)}")
-            print(f"Cookies to be set: {dict(request.cookies)}")
-            return jsonify({
+            
+            # Debug session after login
+            print(f"Session after login: {dict(session)}")
+            print(f"Session ID: {session.sid if hasattr(session, 'sid') else 'No session ID'}")
+            
+            response = jsonify({
                 'message': 'Login successful',
                 'user_id': user_id
             })
-        print("Login failed: Invalid credentials")
+            
+            print(f"Login successful for user: {username} (ID: {user_id})")
+            print(f"Response: {response.get_data(as_text=True)}")
+            print("=== END LOGIN ATTEMPT ===\n")
+            return response
+            
+        print(f"Login failed: Invalid credentials for user: {username}")
+        print("=== END LOGIN ATTEMPT ===\n")
         return jsonify({'error': 'Invalid credentials'}), 401
+        
     except Exception as e:
         print(f"Login error: {str(e)}")
         traceback.print_exc()
+        print("=== END LOGIN ATTEMPT (ERROR) ===\n")
         return jsonify({'error': str(e)}), 500
 
 

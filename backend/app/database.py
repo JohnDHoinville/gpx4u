@@ -388,16 +388,37 @@ class RunDatabase:
             raise
 
     def verify_user(self, username, password):
-        """Verify a user's credentials"""
+        """Verify user credentials"""
         try:
+            print(f"Verifying user: {username}")
             with sqlite3.connect(self.db_name) as conn:
                 cursor = conn.cursor()
                 cursor.execute('SELECT id, password_hash FROM users WHERE username = ?', (username,))
-                result = cursor.fetchone()
+                user = cursor.fetchone()
                 
-                if result and check_password_hash(result[1], password):
-                    return result[0]  # Return user_id if password matches
-                return None  # Return None if user not found or password doesn't match
+                if not user:
+                    print(f"User '{username}' not found")
+                    return None
+                    
+                user_id, password_hash = user
+                print(f"Found user ID: {user_id}")
+                print(f"Hash method: {password_hash.split('$')[0] if '$' in password_hash else 'unknown'}")
+                
+                # Try password verification
+                try:
+                    result = check_password_hash(password_hash, password)
+                    print(f"Password check result: {'Success' if result else 'Failed'}")
+                    
+                    if result:
+                        print(f"Authentication successful for user: {username}")
+                        return user_id
+                    else:
+                        print(f"Password verification failed for user: {username}")
+                except Exception as e:
+                    print(f"Error in password verification: {e}")
+                    traceback.print_exc()
+                    
+                return None
         except Exception as e:
             print(f"Error verifying user: {e}")
             traceback.print_exc()
