@@ -10,7 +10,6 @@ const CustomSegments = ({ runs, currentRun }) => {
   const [endDistance, setEndDistance] = useState(1);
   const [activeSegment, setActiveSegment] = useState(null);
   const [segmentResults, setSegmentResults] = useState(null);
-  const [isDemoMode, setIsDemoMode] = useState(false);
 
   // Add a safe JSON stringify helper function
   const safeStringify = (obj) => {
@@ -64,7 +63,7 @@ const CustomSegments = ({ runs, currentRun }) => {
       console.error("Error loading segments:", error);
       createDemoSegments();
     }
-  }, [currentRun?.total_distance, createDemoSegments]);
+  }, [currentRun?.total_distance]);
 
   // Save segments to localStorage when they change
   useEffect(() => {
@@ -432,12 +431,6 @@ const CustomSegments = ({ runs, currentRun }) => {
     localStorage.setItem('customSegments', safeStringify(demoSegments));
     console.log("Created and saved demo segments:", demoSegments);
   }
-  
-  useEffect(() => {
-    if (isDemoMode) {
-      createDemoSegments();
-    }
-  }, [isDemoMode, createDemoSegments]);
   
   return (
     <div className="custom-segments">
