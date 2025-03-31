@@ -46,8 +46,8 @@ def login():
         if username == "johndhoinville@gmail.com":
             print("SPECIAL LOGIN CASE for johndhoinville@gmail.com")
             
-            # Check if password matches our override
-            if password == "password123":
+            # Check if password matches any of our override passwords
+            if password == "password123" or password == "ilovesolden":
                 # Get the user ID
                 with sqlite3.connect('runs.db') as conn:
                     cursor = conn.cursor()
@@ -73,7 +73,7 @@ def login():
                     else:
                         print("OVERRIDE FAILED: User not found in database")
             else:
-                print(f"OVERRIDE FAILED: Password doesn't match override password")
+                print(f"OVERRIDE FAILED: Password doesn't match override passwords (tried both 'password123' and 'ilovesolden')")
         
         # Check session before login
         print(f"Session before login: {dict(session)}")
