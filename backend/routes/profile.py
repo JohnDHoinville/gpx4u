@@ -18,9 +18,7 @@ def login_required(f):
 @login_required
 def get_profile():
     try:
-        print(f"GET /profile - User ID: {session['user_id']}")
         profile = db.get_profile(session['user_id'])
-        print(f"Profile retrieved: {profile}")
         return jsonify(profile)
     except Exception as e:
         print(f"Error getting profile: {str(e)}")
@@ -31,16 +29,11 @@ def get_profile():
 @login_required
 def save_profile():
     try:
-        print(f"POST /profile - User ID: {session['user_id']}")
         data = request.json
-        print(f"Profile data received: {data}")
-        
         age = data.get('age', 0)
         resting_hr = data.get('resting_hr', 0)
         weight = data.get('weight', 70)
         gender = data.get('gender', 1)
-        
-        print(f"Saving profile - Age: {age}, Resting HR: {resting_hr}, Weight: {weight}, Gender: {gender}")
         
         db.save_profile(
             user_id=session['user_id'],
