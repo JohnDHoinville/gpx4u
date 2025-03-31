@@ -109,8 +109,23 @@ except Exception as e:
 # Use absolute path for static folder to ensure it works with any working directory
 static_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), 'static'))
 print(f"Using static folder: {static_folder}")
-app = Flask(__name__, static_folder=static_folder)
-print(f"Starting Flask server in {env} mode...")
+
+# Attempt to fix React asset paths issue by checking for asset-manifest.json
+asset_manifest_path = os.path.join(static_folder, 'asset-manifest.json')
+if os.path.exists(asset_manifest_path):
+    print(f"Found asset-manifest.json at {asset_manifest_path}")
+    try:
+        with open(asset_manifest_path, 'r') as f:
+            asset_manifest = json.load(f)
+            print(f"Asset manifest contains {len(asset_manifest)} entries")
+            for key, path in asset_manifest.items():
+                if key.startswith('files.'):
+                    print(f"Asset path: {key} -> {path}")
+    except Exception as e:
+        print(f"Error reading asset manifest: {e}")
+
+app = Flask(__name__, static_folder=static_folder, static_url_path='')
+print(f"Starting Flask server in {env} mode with static url path: ''")
 
 # Use the custom encoder for all JSON responses
 app.json_encoder = DateTimeEncoder
@@ -191,26 +206,65 @@ def serve(path):
         if not path:
             print("Serving index.html for root path")
             return send_from_directory(static_folder, 'index.html')
+        
+        # Handle the case where path starts with 'static/'
+        if path.startswith('static/'):
+            rel_path = path[7:]  # Remove 'static/' from the beginning
+            full_path = os.path.join(static_folder, 'static', rel_path)
+            dir_path = os.path.dirname(full_path)
+            file_name = os.path.basename(full_path)
             
-        # Check if path exists directly in static folder
+            if os.path.exists(full_path) and os.path.isfile(full_path):
+                print(f"Serving static file from: {dir_path}, file: {file_name}")
+                return send_from_directory(dir_path, file_name)
+        
+        # Direct file access for non-prefixed paths
         full_path = os.path.join(static_folder, path)
         if os.path.exists(full_path) and os.path.isfile(full_path):
             print(f"Serving file directly: {full_path}")
-            return send_from_directory(static_folder, path)
+            dir_path = os.path.dirname(full_path)
+            file_name = os.path.basename(full_path)
+            return send_from_directory(dir_path, file_name)
             
-        # Handle static files in subdirectories (like static/static/js/*)
-        static_js = os.path.join(static_folder, 'static', 'js')
-        static_css = os.path.join(static_folder, 'static', 'css')
+        # Check if file exists in static/js or static/css
+        if path.endswith('.js'):
+            js_path = os.path.join(static_folder, 'static', 'js', path)
+            if os.path.exists(js_path):
+                print(f"Serving JS file: {path}")
+                return send_from_directory(os.path.join(static_folder, 'static', 'js'), path)
+                
+        if path.endswith('.css'):
+            css_path = os.path.join(static_folder, 'static', 'css', path)
+            if os.path.exists(css_path):
+                print(f"Serving CSS file: {path}")
+                return send_from_directory(os.path.join(static_folder, 'static', 'css'), path)
         
-        if path.startswith('static/js/') and os.path.exists(static_js):
-            js_file = path.replace('static/js/', '')
-            print(f"Serving JS file: {js_file} from {static_js}")
-            return send_from_directory(static_js, js_file)
-            
-        if path.startswith('static/css/') and os.path.exists(static_css):
-            css_file = path.replace('static/css/', '')
-            print(f"Serving CSS file: {css_file} from {static_css}")
-            return send_from_directory(static_css, css_file)
+        # Special case for main.[hash].js and main.[hash].css files
+        if path.startswith('main.') and path.endswith('.js'):
+            # Look for any main.*.js file in static/js
+            js_dir = os.path.join(static_folder, 'static', 'js')
+            if os.path.exists(js_dir):
+                for file in os.listdir(js_dir):
+                    if file.startswith('main.') and file.endswith('.js'):
+                        print(f"Found main JS file: {file}")
+                        return send_from_directory(js_dir, file)
+                        
+        if path.startswith('main.') and path.endswith('.css'):
+            # Look for any main.*.css file in static/css
+            css_dir = os.path.join(static_folder, 'static', 'css')
+            if os.path.exists(css_dir):
+                for file in os.listdir(css_dir):
+                    if file.startswith('main.') and file.endswith('.css'):
+                        print(f"Found main CSS file: {file}")
+                        return send_from_directory(css_dir, file)
+        
+        # Debugging - list content of static folder
+        print(f"Could not find file: {path}")
+        print(f"Static folder contents:")
+        for root, dirs, files in os.walk(static_folder):
+            for file in files:
+                rel_path = os.path.relpath(os.path.join(root, file), static_folder)
+                print(f"  {rel_path}")
         
         # For all other paths, serve index.html to support SPA routing
         print(f"Path '{path}' not found as static file, serving index.html")
