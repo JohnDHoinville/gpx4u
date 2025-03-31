@@ -24,6 +24,13 @@ from routes.runs import runs_bp
 from routes.profile import profile_bp
 from config import config
 
+# Use the custom encoder for all JSON responses
+class DateTimeEncoder(JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.strftime('%Y-%m-%d %H:%M:%S')
+        return super().default(obj)
+
 # Add debugging and error handling
 def handle_exception(e):
     """Print exception details to stderr for Render logs"""
