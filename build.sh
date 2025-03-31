@@ -38,6 +38,24 @@ mkdir -p backend/static
 
 # Copy frontend build to backend/static
 echo "Copying frontend build files to backend..."
-cp -r build/* backend/static/
+cp -rv build/* backend/static/
+
+# Debug information to verify file locations
+echo "Listing backend/static directory:"
+ls -la backend/static/
+if [ -d "backend/static/static" ]; then
+  echo "Listing backend/static/static directory:"
+  ls -la backend/static/static/
+  
+  if [ -d "backend/static/static/js" ]; then
+    echo "Listing JS files:"
+    ls -la backend/static/static/js/
+  fi
+  
+  if [ -d "backend/static/static/css" ]; then
+    echo "Listing CSS files:"
+    ls -la backend/static/static/css/
+  fi
+fi
 
 echo "Build completed successfully!" 

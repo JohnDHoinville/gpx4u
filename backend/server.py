@@ -106,7 +106,9 @@ except Exception as e:
     RunDatabaseAdapter = FallbackDatabaseAdapter
 
 # Initialize Flask app with static folder
-static_folder = os.path.join(os.path.dirname(__file__), 'static')
+# Use absolute path for static folder to ensure it works with any working directory
+static_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), 'static'))
+print(f"Using static folder: {static_folder}")
 app = Flask(__name__, static_folder=static_folder)
 print(f"Starting Flask server in {env} mode...")
 
@@ -183,13 +185,36 @@ def test():
 @app.route('/<path:path>')
 def serve(path):
     try:
-        if path and os.path.exists(os.path.join(app.static_folder, path)):
-            return send_from_directory(app.static_folder, path)
-        elif os.path.exists(os.path.join(app.static_folder, 'index.html')):
-            return send_from_directory(app.static_folder, 'index.html')
-        else:
-            # If we're in development or static files aren't available, just show API info
-            return jsonify({'message': f'Server is running in {env} mode. Static files not found.'}), 200
+        print(f"Serving path: '{path}'")
+        
+        # For the root path, serve index.html
+        if not path:
+            print("Serving index.html for root path")
+            return send_from_directory(static_folder, 'index.html')
+            
+        # Check if path exists directly in static folder
+        full_path = os.path.join(static_folder, path)
+        if os.path.exists(full_path) and os.path.isfile(full_path):
+            print(f"Serving file directly: {full_path}")
+            return send_from_directory(static_folder, path)
+            
+        # Handle static files in subdirectories (like static/static/js/*)
+        static_js = os.path.join(static_folder, 'static', 'js')
+        static_css = os.path.join(static_folder, 'static', 'css')
+        
+        if path.startswith('static/js/') and os.path.exists(static_js):
+            js_file = path.replace('static/js/', '')
+            print(f"Serving JS file: {js_file} from {static_js}")
+            return send_from_directory(static_js, js_file)
+            
+        if path.startswith('static/css/') and os.path.exists(static_css):
+            css_file = path.replace('static/css/', '')
+            print(f"Serving CSS file: {css_file} from {static_css}")
+            return send_from_directory(static_css, css_file)
+        
+        # For all other paths, serve index.html to support SPA routing
+        print(f"Path '{path}' not found as static file, serving index.html")
+        return send_from_directory(static_folder, 'index.html')
     except Exception as e:
         error_msg = handle_exception(e)
         return jsonify({'error': f"Error serving path '{path}': {error_msg}"}), 500
