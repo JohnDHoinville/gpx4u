@@ -35,4 +35,79 @@
 .predicted-pace {
   font-size: 1em;
   color: var(--text-secondary);
+}
+
+/* Info tooltip styles */
+.section-title-with-info {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.section-title-with-info h3 {
+  margin: 0;
+  margin-right: 8px;
+}
+
+.info-tooltip {
+  position: relative;
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: var(--accent-primary, #4a90e2);
+  color: white;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+  cursor: help;
+}
+
+.info-tooltip-content {
+  visibility: hidden;
+  position: absolute;
+  width: 300px;
+  background-color: var(--background-primary, white);
+  color: var(--text-primary, #333);
+  text-align: left;
+  border-radius: 6px;
+  padding: 12px;
+  z-index: 1;
+  bottom: 125%;
+  left: 50%;
+  margin-left: -150px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border-color, #e0e0e0);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.info-tooltip:hover .info-tooltip-content {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* Dark theme support */
+.dark .race-predictions {
+  background-color: #2a2a2a;
+}
+
+.dark .prediction-card {
+  background-color: #333;
+}
+
+.dark .prediction-card h4 {
+  color: #eee;
+}
+
+.dark .predicted-pace {
+  color: #aaa;
+}
+
+.dark .info-tooltip-content {
+  background-color: #333;
+  color: #eee;
+  border-color: #555;
 } 

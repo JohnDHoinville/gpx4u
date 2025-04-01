@@ -1,6 +1,16 @@
 import React from 'react';
 import './RacePredictions.css';
 
+// Enhanced InfoTooltip component with content directly embedded
+const InfoTooltip = ({ content }) => (
+  <span className="info-tooltip">
+    ⓘ
+    <div className="info-tooltip-content">
+      {content}
+    </div>
+  </span>
+);
+
 const formatTime = (timeInMinutes) => {
   const hours = Math.floor(timeInMinutes / 60);
   const minutes = Math.floor(timeInMinutes % 60);
@@ -29,10 +39,28 @@ const RacePredictions = ({ predictions }) => {
     '21.1k': 13.1,
     '42.2k': 26.2
   };
+  
+  // Race predictions explanation for the tooltip
+  const racePredictionsContent = (
+    <div>
+      <p><strong>About Race Predictions:</strong></p>
+      <p>These predictions use the Riegel formula, a well-established method used by runners to estimate race times across different distances based on current performance.</p>
+      <p><strong>How it works:</strong></p>
+      <ul style={{ paddingLeft: '20px', margin: '8px 0' }}>
+        <li>The system analyzes your fastest segments from this run</li>
+        <li>It uses the formula: T2 = T1 × (D2/D1)<sup>1.06</sup></li>
+        <li>Where T1 is your current performance time, D1 is the distance of that performance, T2 is the predicted time, and D2 is the race distance</li>
+      </ul>
+      <p>These times represent potential performance when properly trained for each specific distance.</p>
+    </div>
+  );
 
   return (
     <div className="race-predictions">
-      <h3>Race Time Predictions</h3>
+      <div className="section-title-with-info">
+        <h3>Race Time Predictions</h3>
+        <InfoTooltip content={racePredictionsContent} />
+      </div>
       <div className="predictions-grid">
         {Object.entries(predictions).map(([distance, time]) => {
           // Get distance in km (remove 'k' and parse)
