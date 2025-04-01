@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPX4U Admin Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #e1e1e1;
+        }
+        h1 {
+            color: #333;
+            margin: 0;
+        }
+        .logout-button {
+            background-color: #f1f1f1;
+            color: #333;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 16px;
+            text-decoration: none;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .logout-button:hover {
+            background-color: #e1e1e1;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #e1e1e1;
+        }
+        th {
+            background-color: #f8f8f8;
+            font-weight: 600;
+            color: #444;
+        }
+        tr:hover {
+            background-color: #f9f9f9;
+        }
+        .action-cell {
+            display: flex;
+            gap: 10px;
+        }
+        .action-button {
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        .reset-button {
+            background-color: #3498db;
+            color: white;
+        }
+        .reset-button:hover {
+            background-color: #2980b9;
+        }
+        .delete-button {
+            background-color: #e74c3c;
+            color: white;
+        }
+        .delete-button:hover {
+            background-color: #c0392b;
+        }
+        .user-id {
+            font-weight: 500;
+            color: #666;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 50px;
+            color: #888;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            width: 400px;
+            max-width: 90%;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .modal-title {
+            font-size: 20px;
+            margin: 0;
+        }
+        .close-button {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #777;
+        }
+        .modal-footer {
+            margin-top: 30px;
+            text-align: right;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #555;
+        }
+        input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        .confirm-button {
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 20px;
+            cursor: pointer;
+        }
+        .confirm-button:hover {
+            background-color: #27ae60;
+        }
+        .cancel-button {
+            background-color: #f1f1f1;
+            color: #333;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 20px;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+        .cancel-button:hover {
+            background-color: #e1e1e1;
+        }
+        .admin-row {
+            background-color: #fffdf0;
+        }
+        .success-message {
+            display: none;
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: #2ecc71;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+        }
+        .debug-info {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-family: monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>GPX4U Admin Dashboard</h1>
+            <a href="/admin/logout" class="logout-button">Logout</a>
+        </header>
+        
+        <!-- Debug Information -->
+        <div class="debug-info">
+            <strong>Server Date:</strong> {{ now() }}<br>
+            <strong>Users Data Type:</strong> {{ users.__class__.__name__ if users else 'None' }}<br>
+            <strong>Users Count:</strong> {{ users|length if users else 0 }}
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Username</th>
+                    <th>Profile Information</th>
+                    <th>Run Count</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if users and users|length > 0 %}
+                    {% for user in users %}
+                    <tr {% if user.id == 1 %}class="admin-row"{% endif %}>
+                        <td class="user-id">{{ user.id }}</td>
+                        <td>{{ user.username }}</td>
+                        <td>
+                            {% if user.profile %}
+                                Age: {{ user.profile.age or 'Not set' }}<br>
+                                Resting HR: {{ user.profile.resting_hr or 'Not set' }}<br>
+                                Weight: {{ user.profile.weight or 'Not set' }} {% if user.profile.weight %}lbs{% endif %}<br>
+                                Gender: {{ user.profile.gender or 'Not set' }}
+                            {% else %}
+                                No profile data
+                            {% endif %}
+                        </td>
+                        <td>{{ user.run_count }}</td>
+                        <td>{{ user.created_at }}</td>
+                        <td class="action-cell">
+                            {% if user.id != 1 %}
+                            <button class="action-button reset-button" onclick="openResetModal({{ user.id }}, '{{ user.username }}')">Reset Password</button>
+                            <button class="action-button delete-button" onclick="openDeleteModal({{ user.id }}, '{{ user.username }}')">Delete Account</button>
+                            {% else %}
+                            <em>Admin account</em>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="6" class="empty-state">No users found</td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Reset Password Modal -->
+    <div id="resetModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Reset Password</h3>
+                <button class="close-button" onclick="closeModal('resetModal')">&times;</button>
+            </div>
+            <p>Reset password for <strong id="resetUsername"></strong></p>
+            <form id="resetForm">
+                <div class="form-group">
+                    <label for="newPassword">New Password</label>
+                    <input type="password" id="newPassword" name="new_password" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="cancel-button" onclick="closeModal('resetModal')">Cancel</button>
+                    <button type="submit" class="confirm-button">Reset Password</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Delete Account Modal -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Delete Account</h3>
+                <button class="close-button" onclick="closeModal('deleteModal')">&times;</button>
+            </div>
+            <p>Are you sure you want to delete the account for <strong id="deleteUsername"></strong>?</p>
+            <p><strong>Warning:</strong> This action cannot be undone. All user data including runs and profile information will be permanently deleted.</p>
+            <form id="deleteForm">
+                <div class="modal-footer">
+                    <button type="button" class="cancel-button" onclick="closeModal('deleteModal')">Cancel</button>
+                    <button type="submit" class="confirm-button delete-button">Delete Account</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Success Message -->
+    <div id="successMessage" class="success-message"></div>
+
+    <script>
+        let currentUserId = 0;
+        
+        function openResetModal(userId, username) {
+            currentUserId = userId;
+            document.getElementById('resetUsername').textContent = username;
+            document.getElementById('resetModal').style.display = 'flex';
+        }
+        
+        function openDeleteModal(userId, username) {
+            currentUserId = userId;
+            document.getElementById('deleteUsername').textContent = username;
+            document.getElementById('deleteModal').style.display = 'flex';
+        }
+        
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+        
+        document.getElementById('resetForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const newPassword = document.getElementById('newPassword').value;
+            
+            fetch(`/admin/reset-password/${currentUserId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ new_password: newPassword })
+            })
+            .then(response => response.json())
+            .then(data => {
+                closeModal('resetModal');
+                showSuccessMessage(data.message || 'Password reset successfully');
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showSuccessMessage('Error resetting password', true);
+            });
+        });
+        
+        document.getElementById('deleteForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            fetch(`/admin/delete-user/${currentUserId}`, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                closeModal('deleteModal');
+                showSuccessMessage(data.message || 'Account deleted successfully');
+                // Reload the page after a short delay to refresh the user list
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showSuccessMessage('Error deleting account', true);
+            });
+        });
+        
+        function showSuccessMessage(message, isError = false) {
+            const messageElement = document.getElementById('successMessage');
+            messageElement.textContent = message;
+            messageElement.style.backgroundColor = isError ? '#e74c3c' : '#2ecc71';
+            messageElement.style.display = 'block';
+            
+            setTimeout(() => {
+                messageElement.style.display = 'none';
+            }, 3000);
+        }
+        
+        // Close modals when clicking outside
+        window.onclick = function(event) {
+            if (event.target.className === 'modal') {
+                event.target.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html> 

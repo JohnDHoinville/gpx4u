@@ -494,4 +494,93 @@ class RunDatabaseAdapter:
         except Exception as e:
             print(f"Error saving profile: {str(e)}")
             traceback.print_exc()
-            raise e 
+            raise e
+            
+    def admin_reset_password(self, user_id, new_password):
+        """Reset a user's password (admin function, no current password required)"""
+        try:
+            print(f"Admin resetting password for user {user_id}")
+            
+            # Generate password hash
+            password_hash = generate_password_hash(new_password, method='pbkdf2:sha256')
+            
+            if self.use_sqlalchemy:
+                with self.engine.connect() as conn:
+                    result = conn.execute(
+                        update(self.users)
+                        .where(self.users.c.id == user_id)
+                        .values(password_hash=password_hash)
+                    )
+                    conn.commit()
+                    success = result.rowcount > 0
+                    print(f"Password reset {'successful' if success else 'failed'} using SQLAlchemy")
+                    return success
+            else:
+                with sqlite3.connect(self.db_name) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                        UPDATE users 
+                        SET password_hash = ? 
+                        WHERE id = ?
+                    ''', (password_hash, user_id))
+                    conn.commit()
+                    success = cursor.rowcount > 0
+                    print(f"Password reset {'successful' if success else 'failed'} using SQLite")
+                    return success
+                    
+        except Exception as e:
+            print(f"Error resetting password: {str(e)}")
+            traceback.print_exc()
+            return False
+            
+    def delete_user(self, user_id):
+        """Delete a user account and all associated data (admin function)"""
+        try:
+            print(f"Admin deleting user {user_id}")
+            
+            if self.use_sqlalchemy:
+                with self.engine.connect() as conn:
+                    # Delete runs first
+                    conn.execute(
+                        delete(self.runs)
+                        .where(self.runs.c.user_id == user_id)
+                    )
+                    
+                    # Delete profile
+                    conn.execute(
+                        delete(self.profile)
+                        .where(self.profile.c.user_id == user_id)
+                    )
+                    
+                    # Delete user
+                    result = conn.execute(
+                        delete(self.users)
+                        .where(self.users.c.id == user_id)
+                    )
+                    
+                    conn.commit()
+                    success = result.rowcount > 0
+                    print(f"User deletion {'successful' if success else 'failed'} using SQLAlchemy")
+                    return success
+            else:
+                with sqlite3.connect(self.db_name) as conn:
+                    cursor = conn.cursor()
+                    
+                    # Delete runs first
+                    cursor.execute('DELETE FROM runs WHERE user_id = ?', (user_id,))
+                    
+                    # Delete profile
+                    cursor.execute('DELETE FROM profile WHERE user_id = ?', (user_id,))
+                    
+                    # Delete user
+                    cursor.execute('DELETE FROM users WHERE id = ?', (user_id,))
+                    
+                    conn.commit()
+                    success = cursor.rowcount > 0
+                    print(f"User deletion {'successful' if success else 'failed'} using SQLite")
+                    return success
+                    
+        except Exception as e:
+            print(f"Error deleting user: {str(e)}")
+            traceback.print_exc()
+            return False 

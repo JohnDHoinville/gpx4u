@@ -22,6 +22,7 @@ from json import JSONEncoder
 from routes.auth import auth_bp
 from routes.runs import runs_bp
 from routes.profile import profile_bp
+from routes.admin import admin_bp
 from config import config
 import sqlite3
 from sqlalchemy import select, func
@@ -201,6 +202,10 @@ def login_required(f):
 @app.route('/test', methods=['GET'])
 def test():
     return jsonify({'status': 'Backend server is running'}), 200
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(static_folder, 'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
@@ -465,6 +470,7 @@ def save_profile():
 app.register_blueprint(auth_bp)
 app.register_blueprint(runs_bp)
 app.register_blueprint(profile_bp)
+app.register_blueprint(admin_bp)
 
 # Add a health check endpoint
 @app.route('/api/health')
