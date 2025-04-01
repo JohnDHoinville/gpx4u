@@ -1,0 +1,107 @@
+#!/bin/bash
+# Automatic database restoration script for Render.com
+# This script does not require interactive confirmation
+
+set -e  # Exit on error
+
+echo "=== Automatic Database Restoration Script ==="
+echo "Environment: $FLASK_ENV"
+echo "Working directory: $(pwd)"
+echo "Date: $(date)"
+
+# Check for uploaded database
+UPLOADED_DB="./uploaded_runs.db"
+if [ ! -f "$UPLOADED_DB" ]; then
+  echo "ERROR: No uploaded database found at $UPLOADED_DB"
+  echo "Please upload your database file as 'uploaded_runs.db' first."
+  exit 1
+fi
+
+# Check environment variables
+echo "DATABASE_PATH: $DATABASE_PATH"
+if [ -z "$DATABASE_PATH" ]; then
+  export DATABASE_PATH="/opt/render/data/runs.db"
+  echo "Using default DATABASE_PATH: $DATABASE_PATH"
+else
+  echo "Using configured DATABASE_PATH: $DATABASE_PATH"
+fi
+
+# Check database directory
+db_dir=$(dirname "$DATABASE_PATH")
+echo "Database directory: $db_dir"
+if [ ! -d "$db_dir" ]; then
+  echo "Creating database directory: $db_dir"
+  mkdir -p "$db_dir"
+else
+  echo "Database directory exists"
+fi
+
+# Backup existing database if it exists
+if [ -f "$DATABASE_PATH" ]; then
+  BACKUP_PATH="${DATABASE_PATH}.backup.$(date +%Y%m%d_%H%M%S)"
+  echo "Backing up existing database to: $BACKUP_PATH"
+  cp "$DATABASE_PATH" "$BACKUP_PATH"
+  echo "Backup completed successfully."
+  
+  # Show info about current database
+  db_size=$(stat -c %s "$DATABASE_PATH" 2>/dev/null || stat -f %z "$DATABASE_PATH")
+  echo "Current database size: $(numfmt --to=iec-i --suffix=B $db_size 2>/dev/null || echo "$db_size bytes")"
+  
+  echo "Current database users:"
+  sqlite3 "$DATABASE_PATH" "SELECT id, username, created_at FROM users;" 2>/dev/null || echo "Failed to query database."
+  
+  echo "Current database run count:"
+  sqlite3 "$DATABASE_PATH" "SELECT COUNT(*) FROM runs;" 2>/dev/null || echo "Failed to query database."
+else
+  echo "No existing database to back up."
+fi
+
+# Show info about uploaded database
+uploaded_size=$(stat -c %s "$UPLOADED_DB" 2>/dev/null || stat -f %z "$UPLOADED_DB")
+echo "Uploaded database size: $(numfmt --to=iec-i --suffix=B $uploaded_size 2>/dev/null || echo "$uploaded_size bytes")"
+
+echo "Uploaded database users:"
+sqlite3 "$UPLOADED_DB" "SELECT id, username, created_at FROM users;" 2>/dev/null || echo "Failed to query uploaded database."
+
+echo "Uploaded database run count:"
+sqlite3 "$UPLOADED_DB" "SELECT COUNT(*) FROM runs;" 2>/dev/null || echo "Failed to query uploaded database."
+
+# No confirmation in this version, proceed automatically
+echo "PROCEEDING WITH DATABASE RESTORATION WITHOUT CONFIRMATION"
+
+# Copy the database
+echo "Copying uploaded database to: $DATABASE_PATH"
+cp "$UPLOADED_DB" "$DATABASE_PATH"
+echo "Database restoration completed."
+
+# Set proper permissions
+echo "Setting permissions on database file"
+chmod 644 "$DATABASE_PATH"
+
+# Verify the restoration
+echo "Verifying restored database..."
+if [ -f "$DATABASE_PATH" ]; then
+  restored_size=$(stat -c %s "$DATABASE_PATH" 2>/dev/null || stat -f %z "$DATABASE_PATH")
+  echo "Restored database size: $(numfmt --to=iec-i --suffix=B $restored_size 2>/dev/null || echo "$restored_size bytes")"
+  
+  echo "Restored database users:"
+  sqlite3 "$DATABASE_PATH" "SELECT id, username, created_at FROM users;" 2>/dev/null || echo "Failed to query restored database."
+  
+  echo "Restored database run count:"
+  sqlite3 "$DATABASE_PATH" "SELECT COUNT(*) FROM runs;" 2>/dev/null || echo "Failed to query restored database."
+  
+  if [ "$restored_size" -eq "$uploaded_size" ]; then
+    echo "RESTORATION SUCCESSFUL: Database sizes match."
+  else
+    echo "WARNING: Database sizes do not match. This might be due to filesystem differences."
+    echo "Original size: $uploaded_size bytes"
+    echo "Restored size: $restored_size bytes"
+  fi
+else
+  echo "ERROR: Database restoration failed. File not found at $DATABASE_PATH"
+  exit 1
+fi
+
+echo "=== Automatic Database Restoration Complete ==="
+echo "You should see your data in the application now."
+echo "If you don't see your data, you may need to restart the application." 
