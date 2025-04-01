@@ -1889,6 +1889,7 @@ function App() {
                 <th>Date</th>
                 <th>Distance</th>
                 <th>Target Pace</th>
+                <th>Overall Pace</th>
                 <th>Heart Rate</th>
                 <th>Fast Segments</th>
                 <th>Actions</th>
@@ -1950,6 +1951,81 @@ function App() {
                         
                         // Otherwise format the pace
                         return formatPace(paceLimit);
+                      })()}
+                    </td>
+                    <td>
+                      {(() => {
+                        // Extract overall pace with defensive coding
+                        let overallPace = null;
+                        
+                        // Try direct property
+                        if (isFinite(run.avg_pace)) {
+                          overallPace = run.avg_pace;
+                        }
+                        // Try data object
+                        else if (run.data) {
+                          if (typeof run.data === 'object' && run.data !== null) {
+                            if (isFinite(run.data.avg_pace_all)) {
+                              overallPace = run.data.avg_pace_all;
+                            } else if (isFinite(run.data.avg_pace)) {
+                              overallPace = run.data.avg_pace;
+                            }
+                          } else if (typeof run.data === 'string') {
+                            try {
+                              const parsedData = JSON.parse(run.data);
+                              if (isFinite(parsedData.avg_pace_all)) {
+                                overallPace = parsedData.avg_pace_all;
+                              } else if (isFinite(parsedData.avg_pace)) {
+                                overallPace = parsedData.avg_pace;
+                              }
+                            } catch (e) {
+                              console.error("Error parsing run data for overall pace:", e);
+                            }
+                          }
+                        }
+                        
+                        // Calculate from segments if needed and possible
+                        if (overallPace === null) {
+                          try {
+                            const data = typeof run.data === 'string' ? JSON.parse(run.data) : run.data;
+                            if (data && data.fast_segments && data.slow_segments) {
+                              // Use the calculateTotalPace function logic
+                              const fastSegments = data.fast_segments || [];
+                              const slowSegments = data.slow_segments || [];
+                              
+                              let totalDistance = 0;
+                              let totalTime = 0;
+                              
+                              // Add up fast segments
+                              for (const segment of fastSegments) {
+                                if (isFinite(segment.distance) && isFinite(segment.pace)) {
+                                  totalDistance += segment.distance;
+                                  totalTime += segment.distance * segment.pace;
+                                }
+                              }
+                              
+                              // Add up slow segments
+                              for (const segment of slowSegments) {
+                                if (isFinite(segment.distance) && isFinite(segment.pace)) {
+                                  totalDistance += segment.distance;
+                                  totalTime += segment.distance * segment.pace;
+                                }
+                              }
+                              
+                              if (totalDistance > 0) {
+                                overallPace = totalTime / totalDistance;
+                              }
+                            }
+                          } catch (e) {
+                            console.error("Error calculating overall pace from segments:", e);
+                          }
+                        }
+                        
+                        // Format and return
+                        if (overallPace !== null && isFinite(overallPace) && overallPace > 0) {
+                          return formatPace(overallPace);
+                        }
+                        return 'N/A';
                       })()}
                     </td>
                     <td>
@@ -2080,7 +2156,7 @@ function App() {
                   </tr>
                   {expandedRows[run.id] && (
                     <tr className="fast-segments-row">
-                      <td colSpan="7">
+                      <td colSpan="8">
                         <div className="fast-segments-container">
                           <h4>Fast Segments</h4>
                           {loadingStates[run.id] ? (
