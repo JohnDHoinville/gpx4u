@@ -4,7 +4,7 @@ from functools import wraps
 from app.database import RunDatabase
 
 profile_bp = Blueprint('profile_bp', __name__)
-db = RunDatabase()
+db = RunDatabase()  # This will now use DATABASE_PATH from environment
 
 def login_required(f):
     @wraps(f)

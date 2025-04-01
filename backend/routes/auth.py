@@ -5,7 +5,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
 
 auth_bp = Blueprint('auth_bp', __name__)
-db = RunDatabase()
+db = RunDatabase()  # This will now use DATABASE_PATH from environment
 
 @auth_bp.route('/auth/register', methods=['POST'])
 def register():

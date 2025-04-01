@@ -38,8 +38,29 @@ def safe_json_dumps(obj):
     return json.dumps(obj, cls=SafeJSONEncoder)
 
 class RunDatabase:
-    def __init__(self, db_name='runs.db'):
+    def __init__(self, db_name=None):
+        # CRITICAL FIX: Use DATABASE_PATH environment variable if set
+        if db_name is None:
+            # First check environment variable
+            db_name = os.environ.get('DATABASE_PATH')
+            if db_name:
+                print(f"Using DATABASE_PATH from environment: {db_name}")
+            else:
+                # Fallback to default
+                db_name = 'runs.db'
+                print(f"No DATABASE_PATH set, using default: {db_name}")
+        
         self.db_name = db_name
+        
+        # Make sure the directory exists
+        db_dir = os.path.dirname(os.path.abspath(self.db_name))
+        if db_dir and not os.path.exists(db_dir):
+            try:
+                os.makedirs(db_dir, exist_ok=True)
+                print(f"Created database directory: {db_dir}")
+            except Exception as e:
+                print(f"Error creating database directory: {e}")
+        
         # Only create database if it doesn't exist
         if not os.path.exists(self.db_name):
             print(f"Creating new database: {self.db_name}")

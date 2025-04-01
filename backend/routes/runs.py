@@ -8,8 +8,9 @@ from app.database import RunDatabase, safe_json_dumps
 from app.running import analyze_run_file, calculate_vo2max, calculate_training_load, calculate_recovery_time
 import json
 
+# Initialize database with environment variables
 runs_bp = Blueprint('runs_bp', __name__)
-db = RunDatabase()
+db = RunDatabase()  # This will now use DATABASE_PATH from environment
 
 # Updated CustomJSONEncoder with comprehensive Infinity handling
 class CustomJSONEncoder(json.JSONEncoder):
