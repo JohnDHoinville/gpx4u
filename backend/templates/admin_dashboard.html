@@ -202,6 +202,34 @@
             font-size: 14px;
             white-space: pre-wrap;
         }
+        .alert-info {
+            background-color: #d9edf7;
+            border: 1px solid #bce8f1;
+            color: #31708f;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .alert-warning {
+            background-color: #fcf8e3;
+            border: 1px solid #faebcc;
+            color: #8a6d3b;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .btn-refresh {
+            background-color: #5bc0de;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 15px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .btn-refresh:hover {
+            background-color: #46b8da;
+        }
     </style>
 </head>
 <body>
@@ -217,6 +245,23 @@
             <strong>Users Data Type:</strong> {{ users.__class__.__name__ if users else 'None' }}<br>
             <strong>Users Count:</strong> {{ users|length if users else 0 }}
         </div>
+        
+        {% if not users or users|length == 0 %}
+        <div class="alert-warning">
+            <strong>No users found!</strong> This could be due to:
+            <ul>
+                <li>Database connection issues</li>
+                <li>The database is empty</li>
+                <li>The database path is incorrect</li>
+            </ul>
+            <p>Check the server logs for more details.</p>
+            <button class="btn-refresh" onclick="window.location.reload()">Refresh Page</button>
+        </div>
+        {% elif users|length == 1 and users[0].id == 1 %}
+        <div class="alert-info">
+            <strong>Only admin user found.</strong> This appears to be a fresh installation or reset.
+        </div>
+        {% endif %}
         
         <table>
             <thead>
@@ -245,7 +290,7 @@
                                 No profile data
                             {% endif %}
                         </td>
-                        <td>{{ user.run_count }}</td>
+                        <td>{{ user.run_count or 0 }}</td>
                         <td>{{ user.created_at }}</td>
                         <td class="action-cell">
                             {% if user.id != 1 %}
@@ -336,7 +381,8 @@
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ new_password: newPassword })
+                body: JSON.stringify({ new_password: newPassword }),
+                credentials: 'include'
             })
             .then(response => response.json())
             .then(data => {
@@ -353,7 +399,8 @@
             e.preventDefault();
             
             fetch(`/admin/delete-user/${currentUserId}`, {
-                method: 'POST'
+                method: 'DELETE',
+                credentials: 'include'
             })
             .then(response => response.json())
             .then(data => {

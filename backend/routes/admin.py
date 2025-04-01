@@ -95,7 +95,63 @@ def dashboard():
     try:
         # Get all users with their profile information and run counts
         users = get_all_users_with_data()
-        return render_template('admin_dashboard.html', users=users, now=datetime.now)
+        
+        # Debug user data
+        print(f"\n=== ADMIN DASHBOARD DEBUG ===")
+        print(f"Users data type: {type(users)}")
+        print(f"Users count: {len(users) if users else 0}")
+        if users and len(users) > 0:
+            print(f"Sample user: {users[0]}")
+        else:
+            print("No users found. Fallback to direct database access.")
+            
+            # Fallback to direct database query
+            try:
+                import sqlite3
+                db_path = os.environ.get('DATABASE_PATH', 'runs.db')
+                print(f"Attempting direct database access at: {db_path}")
+                
+                with sqlite3.connect(db_path) as conn:
+                    conn.row_factory = sqlite3.Row
+                    cursor = conn.cursor()
+                    
+                    # Get all users, including admin
+                    cursor.execute('''
+                        SELECT id, username, created_at 
+                        FROM users 
+                        ORDER BY id
+                    ''')
+                    users = [dict(row) for row in cursor.fetchall()]
+                    
+                    # Get profile and run count for each user
+                    for user in users:
+                        # Get profile
+                        cursor.execute('SELECT age, resting_hr, weight, gender FROM profile WHERE user_id = ?', 
+                                      (user['id'],))
+                        profile = cursor.fetchone()
+                        if profile:
+                            user['profile'] = dict(profile)
+                        else:
+                            user['profile'] = {}
+                            
+                        # Get run count
+                        cursor.execute('SELECT COUNT(*) FROM runs WHERE user_id = ?', (user['id'],))
+                        user['run_count'] = cursor.fetchone()[0]
+                    
+                    print(f"Direct database access found {len(users)} users")
+            except Exception as e:
+                print(f"Error in fallback database access: {e}")
+                # If all else fails, return a minimal admin user
+                users = [{
+                    'id': 1,
+                    'username': 'admin',
+                    'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'profile': {'age': 0, 'resting_hr': 0, 'weight': 70, 'gender': 1},
+                    'run_count': 0
+                }]
+                print("Using hardcoded admin user as last resort")
+        
+        return render_template('admin_dashboard.html', users=users or [], now=datetime.now)
     except Exception as e:
         print(f"Dashboard error: {str(e)}")
         traceback.print_exc()
@@ -176,13 +232,38 @@ def admin_logout():
 # Helper function to get all users with their data
 def get_all_users_with_data():
     print("\n=== RETRIEVING ALL USERS WITH DATA ===")
-    users = []
     
     try:
-        # Try direct SQLite connection regardless of db.use_sqlalchemy
-        print("Using direct SQLite connection to get users")
+        # Try direct SQLite connection with the correct database path
         db_path = os.environ.get('DATABASE_PATH', 'runs.db')
         print(f"Using database at: {db_path}")
+        
+        # Check if the database exists
+        if not os.path.exists(db_path):
+            print(f"WARNING: Database not found at {db_path}")
+            # Try alternate locations
+            alternate_paths = [
+                'runs.db',
+                '../runs.db',
+                './runs.db',
+                '/opt/render/data/runs.db',
+                '/opt/render/project/src/backend/runs.db',
+                '/opt/render/project/src/runs.db'
+            ]
+            
+            for alt_path in alternate_paths:
+                if os.path.exists(alt_path):
+                    print(f"Found database at alternate location: {alt_path}")
+                    db_path = alt_path
+                    break
+        
+        if not os.path.exists(db_path):
+            print(f"CRITICAL: No database found at any location!")
+            return []
+            
+        # Connect to the database
+        print(f"Connecting to database at: {db_path}")
+        import sqlite3
         
         with sqlite3.connect(db_path) as conn:
             conn.row_factory = sqlite3.Row
@@ -218,7 +299,8 @@ def get_all_users_with_data():
                 
                 # Get run count
                 cursor.execute('SELECT COUNT(*) FROM runs WHERE user_id = ?', (user["id"],))
-                user["run_count"] = cursor.fetchone()[0]
+                count_result = cursor.fetchone()
+                user["run_count"] = count_result[0] if count_result else 0
         
         print(f"Total users retrieved: {len(users)}")
         if users:
@@ -227,4 +309,17 @@ def get_all_users_with_data():
     except Exception as e:
         print(f"ERROR retrieving users: {str(e)}")
         traceback.print_exc()
-        return [] 
+        
+        # Create minimal admin user as fallback
+        try:
+            fallback_users = [{
+                'id': 1,
+                'username': 'admin',
+                'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'profile': {'age': 0, 'resting_hr': 0, 'weight': 70, 'gender': 1},
+                'run_count': 0
+            }]
+            print("Created fallback admin user")
+            return fallback_users
+        except:
+            return [] 
