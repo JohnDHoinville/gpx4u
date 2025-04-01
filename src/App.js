@@ -2549,7 +2549,7 @@ function App() {
                       year: 'numeric', 
                       month: 'long', 
                       day: 'numeric'
-                    }) : 'Current Run'}</h2>
+                    }) : 'Current Run'}{results?.pace_limit ? ` (Target Pace of ${formatPace(results.pace_limit)} min/mile)` : ''}</h2>
                     
                     {/* Summary metrics section with cleaner grid layout */}
                     <div className="results-summary">
