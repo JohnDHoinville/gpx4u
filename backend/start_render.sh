@@ -1,6 +1,6 @@
 #!/bin/bash
 # Startup script for GPX4U on Render.com
-# This script creates a backup of the database but doesn't modify production data
+# This script creates a backup of the database but never modifies the production database
 
 set -e  # Exit on error
 
@@ -19,6 +19,23 @@ else
   echo "Using configured DATABASE_PATH: $DATABASE_PATH"
 fi
 
+# Verify that the database directory exists
+db_dir=$(dirname "$DATABASE_PATH")
+if [ ! -d "$db_dir" ]; then
+  echo "Creating database directory: $db_dir"
+  mkdir -p "$db_dir"
+  echo "Database directory created: $db_dir"
+fi
+
+# Check if the database exists
+if [ -f "$DATABASE_PATH" ]; then
+  echo "Found existing database at: $DATABASE_PATH"
+  echo "Database size: $(du -h "$DATABASE_PATH" | cut -f1)"
+else
+  echo "WARNING: No database found at $DATABASE_PATH"
+  echo "A new database will be created by the application."
+fi
+
 # Create an automatic backup, but don't modify the original database
 if [ -f "./scripts/backup_db.sh" ]; then
   echo "Creating database backup..."
@@ -35,4 +52,4 @@ echo "IMPORTANT: Binding to port $port on host 0.0.0.0 as required by Render"
 
 # Start Gunicorn
 echo "Starting Gunicorn with workers=2, bind=0.0.0.0:$port"
-exec gunicorn --workers=2 --bind=0.0.0.0:$port wsgi:app 
+exec gunicorn --workers=2 --bind=0.0.0.0:$port --log-level=info wsgi:app 

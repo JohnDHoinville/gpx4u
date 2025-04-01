@@ -13,7 +13,17 @@ services:
       chmod +x build.sh && ./build.sh &&
       # Install requirements
       pip install -r backend/requirements.txt
-    startCommand: cd backend && chmod +x start_render.sh && ./start_render.sh
+    startCommand: |
+      # Set the database path explicitly
+      export DATABASE_PATH="/opt/render/data/runs.db" &&
+      # Go to backend and start the server
+      cd backend && 
+      if [ -f "./start_render.sh" ]; then
+        chmod +x start_render.sh && ./start_render.sh
+      else
+        # Fallback to direct gunicorn if script doesn't exist
+        gunicorn --workers=2 --bind=0.0.0.0:$PORT --log-level=info wsgi:app
+      fi
     envVars:
       - key: FLASK_APP
         value: server.py
@@ -25,8 +35,6 @@ services:
         fromDatabase:
           name: run-analysis-db
           property: connectionString
-      - key: DATABASE_PATH
-        value: /opt/render/data/runs.db
       - key: FRONTEND_URL
         # Will use the service URL itself
         value: ${service.url}
