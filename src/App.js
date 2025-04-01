@@ -1012,6 +1012,67 @@ const findMileSplits = (results) => {
   return mileSplitsData;
 };
 
+// Add a function to calculate the total pace from fast and slow segments
+const calculateTotalPace = (results) => {
+  if (!results) return null;
+  
+  // Method 1: If total distance and time are available, use them
+  if (isFinite(results.total_distance) && isFinite(results.total_time) && 
+      results.total_distance > 0 && results.total_time > 0) {
+    return results.total_time / results.total_distance;
+  }
+  
+  // Method 2: Calculate from fast and slow segments
+  if (isFinite(results.fast_distance) && isFinite(results.slow_distance) && 
+      isFinite(results.avg_pace_fast) && isFinite(results.avg_pace_slow) &&
+      (results.fast_distance + results.slow_distance) > 0) {
+    
+    const fastTime = results.fast_distance * results.avg_pace_fast;
+    const slowTime = results.slow_distance * results.avg_pace_slow;
+    const totalTime = fastTime + slowTime;
+    const totalDistance = results.fast_distance + results.slow_distance;
+    
+    return totalTime / totalDistance;
+  }
+  
+  // Method 3: Calculate from segments directly
+  if (results.fast_segments && results.slow_segments) {
+    const fastSegments = results.fast_segments || [];
+    const slowSegments = results.slow_segments || [];
+    
+    let totalDistance = 0;
+    let totalTime = 0;
+    
+    // Add up fast segments
+    for (const segment of fastSegments) {
+      if (isFinite(segment.distance) && isFinite(segment.pace)) {
+        totalDistance += segment.distance;
+        totalTime += segment.distance * segment.pace;
+      }
+    }
+    
+    // Add up slow segments
+    for (const segment of slowSegments) {
+      if (isFinite(segment.distance) && isFinite(segment.pace)) {
+        totalDistance += segment.distance;
+        totalTime += segment.distance * segment.pace;
+      }
+    }
+    
+    if (totalDistance > 0) {
+      return totalTime / totalDistance;
+    }
+  }
+  
+  // Method 4: Use any available pace directly
+  if (isFinite(results.avg_pace_all)) return results.avg_pace_all;
+  if (isFinite(results.avg_pace)) return results.avg_pace;
+  if (isFinite(results.pace)) return results.pace;
+  
+  // No valid pace found
+  return null;
+};
+
 function App() {
   const API_URL = 'http://localhost:5001';
 
@@ -2421,6 +2482,13 @@ function App() {
                           <h3>Total Distance</h3>
                           <p className="result-value">{formatNumber(results?.total_distance || 0)}</p>
                           <p className="result-unit">miles</p>
+                          <div className="avg-pace">
+                            <p className="result-label">Average Pace</p>
+                            <p className="result-value-secondary">
+                              {formatPace(calculateTotalPace(results))}
+                            </p>
+                            <p className="result-unit">/mile</p>
+                          </div>
                           <div className="hr-item">
                             <p className="result-label">Overall Heart Rate</p>
                             <p className="result-value-secondary">{formatNumber(results?.avg_hr_all || 0, 0)}</p>
@@ -2442,6 +2510,11 @@ function App() {
                             </p>
                             <p className="result-unit">/mile</p>
                           </div>
+                          <div className="hr-item">
+                            <p className="result-label">Heart Rate</p>
+                            <p className="result-value-secondary">{formatNumber(results?.avg_hr_fast || 0, 0)}</p>
+                            <p className="result-unit">bpm</p>
+                          </div>
                         </div>
 
                         <div className="result-item">
@@ -2457,6 +2530,11 @@ function App() {
                               {formatPace(extractPaceValue(results, 'slow'))}
                             </p>
                             <p className="result-unit">/mile</p>
+                          </div>
+                          <div className="hr-item">
+                            <p className="result-label">Heart Rate</p>
+                            <p className="result-value-secondary">{formatNumber(results?.avg_hr_slow || 0, 0)}</p>
+                            <p className="result-unit">bpm</p>
                           </div>
                         </div>
                       </div>

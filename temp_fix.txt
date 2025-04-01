@@ -1,0 +1,1 @@
+{formatPace(results?.avg_pace_all || results?.avg_pace || 0)}
