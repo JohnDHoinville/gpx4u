@@ -22,19 +22,34 @@ const RacePredictions = ({ predictions }) => {
     '42.2k': 'Marathon'
   };
 
+  // Convert distances from km to miles for display
+  const distancesInMiles = {
+    '5k': 3.11,
+    '10k': 6.21,
+    '21.1k': 13.1,
+    '42.2k': 26.2
+  };
+
   return (
     <div className="race-predictions">
       <h3>Race Time Predictions</h3>
       <div className="predictions-grid">
-        {Object.entries(predictions).map(([distance, time]) => (
-          <div key={distance} className="prediction-card">
-            <h4>{distances[distance] || distance}</h4>
-            <p className="predicted-time">{formatTime(time)}</p>
-            <p className="predicted-pace">
-              {formatTime(time / parseFloat(distance))} /km
-            </p>
-          </div>
-        ))}
+        {Object.entries(predictions).map(([distance, time]) => {
+          // Get distance in km (remove 'k' and parse)
+          const distanceKm = parseFloat(distance.replace('k', ''));
+          // Get equivalent distance in miles
+          const distanceMiles = distancesInMiles[distance];
+          
+          return (
+            <div key={distance} className="prediction-card">
+              <h4>{distances[distance] || distance}</h4>
+              <p className="predicted-time">{formatTime(time)}</p>
+              <p className="predicted-pace">
+                {formatTime(time / distanceMiles)} /mi
+              </p>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
