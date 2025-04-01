@@ -6,8 +6,14 @@ services:
     name: run-analysis
     env: python
     plan: starter # Use appropriate plan
-    buildCommand: chmod +x build.sh && ./build.sh
-    startCommand: cd backend && gunicorn --workers 2 --bind 0.0.0.0:$PORT wsgi:app
+    buildCommand: |
+      # Install PostgreSQL client if needed
+      pip install psycopg2-binary &&
+      # Standard build process
+      chmod +x build.sh && ./build.sh &&
+      # Install requirements
+      pip install -r backend/requirements.txt
+    startCommand: cd backend && chmod +x start_render.sh && ./start_render.sh
     envVars:
       - key: FLASK_APP
         value: server.py
@@ -19,9 +25,15 @@ services:
         fromDatabase:
           name: run-analysis-db
           property: connectionString
+      - key: DATABASE_PATH
+        value: /opt/render/data/runs.db
       - key: FRONTEND_URL
         # Will use the service URL itself
         value: ${service.url}
+    disk:
+      name: run-analysis-data
+      mountPath: /opt/render/data
+      sizeGB: 1
 
   # Alternatively, you could define separate services for backend and frontend
   # Uncomment to use:
