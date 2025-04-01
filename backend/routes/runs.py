@@ -276,7 +276,9 @@ def analyze():
                     'message': 'Analysis complete',
                     'data': analysis_result,
                     'run_id': run_id,
-                    'saved': True
+                    'saved': True,
+                    'date': run_date,
+                    'run_date': run_date
                 }, cls=CustomJSONEncoder),
                 status=200,
                 mimetype='application/json'
@@ -336,7 +338,7 @@ def get_run_analysis(run_id):
                 'message': 'Analysis data retrieved successfully',
                 'run_id': run['id'],
                 'date': run['date'],
-                'run_date': run['date'],
+                'run_date': run_data.get('run_date', run['date']),  # Prioritize run_date from data if it exists
                 'pace_limit': run['pace_limit'],
             }
 
