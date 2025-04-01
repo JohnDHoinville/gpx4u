@@ -16,6 +16,8 @@ services:
     startCommand: |
       # Set the database path explicitly
       export DATABASE_PATH="/opt/render/data/runs.db" &&
+      # CRITICAL: Copy production database if it doesn't exist at target location
+      [ -f "$DATABASE_PATH" ] || cp -v backend/runs.db "$DATABASE_PATH" 2>/dev/null || true &&
       # Go to backend and start the server
       cd backend && 
       if [ -f "./start_render.sh" ]; then

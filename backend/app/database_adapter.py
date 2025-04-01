@@ -61,47 +61,126 @@ class RunDatabaseAdapter:
     Database adapter with support for both SQLite and PostgreSQL
     """
     def __init__(self):
-        # Safely get the database URI
-        try:
-            # Get the actual string value from the CONFIG.DATABASE_URI
-            db_uri_value = CONFIG.DATABASE_URI
+        # CRITICAL: Prioritize DATABASE_PATH environment variable
+        # This ensures we use the persistent database path on Render.com
+        db_path_env = os.environ.get('DATABASE_PATH')
+        if db_path_env:
+            print(f"Using DATABASE_PATH from environment: {db_path_env}")
+            # For SQLite, construct the URI
+            self.db_uri = f"sqlite:///{db_path_env}"
+            self.db_name = db_path_env
             
-            # Print debug information about the URI type
-            print(f"DATABASE_URI type: {type(db_uri_value)}")
+            # Ensure the database directory exists
+            db_dir = os.path.dirname(db_path_env)
+            if db_dir and not os.path.exists(db_dir):
+                try:
+                    os.makedirs(db_dir, exist_ok=True)
+                    print(f"Created database directory: {db_dir}")
+                except Exception as e:
+                    print(f"Error creating directory: {e}")
+                    
+        # Otherwise, check for DATABASE_URL (PostgreSQL)
+        elif os.environ.get('DATABASE_URL'):
+            db_url = os.environ.get('DATABASE_URL')
+            print(f"Using DATABASE_URL from environment: {db_url}")
+            if db_url.startswith("postgres://"):
+                db_url = db_url.replace("postgres://", "postgresql://", 1)
+            self.db_uri = db_url
+            self.db_name = None  # Not a file path for PostgreSQL
             
-            if db_uri_value is not None:
-                if isinstance(db_uri_value, str):
-                    self.db_uri = db_uri_value
+        # As a last resort, try CONFIG.DATABASE_URI
+        else:
+            try:
+                # Handle the property vs attribute issue
+                if hasattr(CONFIG, 'DATABASE_URI'):
+                    if callable(getattr(CONFIG.__class__, 'DATABASE_URI', None)):
+                        # It's a property, call it as a method
+                        db_uri = CONFIG.DATABASE_URI
+                        print(f"Using DATABASE_URI from config property: {db_uri}")
+                    else:
+                        # It's an attribute
+                        db_uri = CONFIG.DATABASE_URI
+                        print(f"Using DATABASE_URI from config attribute: {db_uri}")
+                        
+                    if db_uri and db_uri.startswith('sqlite:///'):
+                        # Extract the file path for SQLite
+                        self.db_name = db_uri[10:]
+                        if not self.db_name.startswith('/'):
+                            # Relative path - make absolute
+                            self.db_name = os.path.abspath(self.db_name)
+                        self.db_uri = db_uri
+                    else:
+                        self.db_uri = db_uri
+                        self.db_name = None
                 else:
-                    # If it's not a string, try to convert it
-                    self.db_uri = str(db_uri_value)
-                    print(f"Converted DATABASE_URI to string: {self.db_uri}")
-            else:
-                print("DATABASE_URI is None, defaulting to SQLite")
-                self.db_uri = None
-        except Exception as e:
-            print(f"Error accessing DATABASE_URI: {e}")
-            traceback.print_exc()
-            self.db_uri = None
+                    # Default to SQLite in current directory
+                    self.db_name = 'runs.db'
+                    self.db_uri = f"sqlite:///{self.db_name}"
+                    print(f"Using default database: {self.db_name}")
+            except Exception as e:
+                print(f"Error accessing config DATABASE_URI: {e}")
+                # Default to SQLite in current directory
+                self.db_name = 'runs.db'
+                self.db_uri = f"sqlite:///{self.db_name}"
+                print(f"Falling back to default database: {self.db_name}")
             
         print(f"Final Database URI: {self.db_uri}")
-        
+            
         # Check if we should use SQLAlchemy (for PostgreSQL)  
         if self.db_uri and isinstance(self.db_uri, str) and self.db_uri.startswith('postgresql'):
-            print(f"Using PostgreSQL database: {self.db_uri}")
-            self.use_sqlalchemy = True
-            self.engine = create_engine(self.db_uri)
-            self.metadata = MetaData()
-            self._setup_sqlalchemy_tables()
+            try:
+                print(f"Using PostgreSQL database")
+                self.use_sqlalchemy = True
+                # Try to create the engine - this will fail if psycopg2 is not installed
+                self.engine = create_engine(self.db_uri)
+                self.metadata = MetaData()
+                self._setup_sqlalchemy_tables()
+            except Exception as e:
+                print(f"Error setting up PostgreSQL connection: {str(e)}")
+                traceback.print_exc()
+                # Fall back to SQLite
+                print("Unable to use PostgreSQL, falling back to SQLite")
+                self.use_sqlalchemy = False
+                if not self.db_name:
+                    self.db_name = os.path.abspath('runs.db')
+                # Continue with SQLite setup below
         else:
             self.use_sqlalchemy = False
-            self.db_name = 'runs.db'
-            if not os.path.exists(self.db_name):
-                print(f"Creating new SQLite database: {self.db_name}")
+            
+        # Ensure we have a valid database name for SQLite
+        if not self.db_name:
+            # Default to runs.db in current directory
+            self.db_name = os.path.abspath('runs.db')
+            print(f"Using default SQLite database path: {self.db_name}")
+            
+        # Make sure the directory exists
+        db_dir = os.path.dirname(self.db_name)
+        if db_dir and not os.path.exists(db_dir):
+            try:
+                print(f"Creating database directory: {db_dir}")
+                os.makedirs(db_dir, exist_ok=True)
+            except Exception as e:
+                print(f"Error creating directory {db_dir}: {e}")
+                # Fall back to current directory
+                self.db_name = os.path.abspath('runs.db')
+                print(f"Falling back to local database: {self.db_name}")
+            
+        # Check if a database exists at the target location
+        if os.path.exists(self.db_name):
+            print(f"Found existing database at: {self.db_name}")
+            print(f"Database size: {os.path.getsize(self.db_name) / 1024:.2f} KB")
+            self._ensure_sqlite_tables()
+        else:
+            # Only create a new database if one doesn't exist
+            print(f"No database found at {self.db_name}. Creating new SQLite database.")
+            try:
                 self._init_sqlite_db()
-            else:
-                print(f"Using existing database: {self.db_name}")
-                self._ensure_sqlite_tables()
+            except Exception as e:
+                print(f"Error initializing database: {e}")
+                # Fall back to current directory if we can't write to the target location
+                self.db_name = os.path.abspath('runs.db')
+                print(f"Falling back to local database: {self.db_name}")
+                self._init_sqlite_db()
 
     def _setup_sqlalchemy_tables(self):
         """Setup SQLAlchemy tables for PostgreSQL"""
