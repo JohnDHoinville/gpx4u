@@ -1,101 +1,93 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GPX4U Admin - Login</title>
+    <title>GPX4U Admin Login</title>
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f5f5f5;
+            font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
+            background-color: #f5f5f5;
         }
         .login-container {
             background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
             padding: 30px;
-            width: 400px;
-            max-width: 90%;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            width: 350px;
         }
         h1 {
-            color: #333;
-            margin-top: 0;
             text-align: center;
-            margin-bottom: 30px;
+            color: #333;
+            margin-bottom: 20px;
         }
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
         label {
             display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            color: #555;
+            margin-bottom: 5px;
+            font-weight: bold;
         }
-        input[type="text"],
-        input[type="password"] {
+        input {
             width: 100%;
-            padding: 12px;
+            padding: 10px;
             border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 16px;
+            border-radius: 3px;
             box-sizing: border-box;
         }
         button {
-            background-color: #4a90e2;
+            background-color: #4CAF50;
             color: white;
             border: none;
-            border-radius: 4px;
-            padding: 12px 20px;
-            font-size: 16px;
+            padding: 10px 15px;
+            border-radius: 3px;
             cursor: pointer;
             width: 100%;
-            transition: background-color 0.3s;
+            font-size: 16px;
         }
         button:hover {
-            background-color: #3a7bc8;
+            background-color: #45a049;
         }
-        .error-message {
-            color: #e74c3c;
-            margin-top: 20px;
-            text-align: center;
+        .error {
+            color: red;
+            margin-bottom: 15px;
         }
         .back-link {
-            display: block;
             text-align: center;
-            margin-top: 20px;
-            color: #666;
-            text-decoration: none;
-        }
-        .back-link:hover {
-            text-decoration: underline;
+            margin-top: 15px;
         }
     </style>
 </head>
 <body>
     <div class="login-container">
-        <h1>GPX4U Admin</h1>
-        <form action="/admin/login" method="post">
+        <h1>GPX4U Admin Login</h1>
+        
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+        
+        <form method="post" action="/admin/login">
             <div class="form-group">
                 <label for="username">Username</label>
-                <input type="text" id="username" name="username" required autocomplete="off">
+                <input type="text" id="username" name="username" required>
             </div>
+            
             <div class="form-group">
                 <label for="password">Password</label>
                 <input type="password" id="password" name="password" required>
             </div>
+            
             <button type="submit">Login</button>
-            {% if error %}
-            <div class="error-message">{{ error }}</div>
-            {% endif %}
         </form>
-        <a href="/" class="back-link">Return to Main Site</a>
+        
+        <div class="back-link">
+            <a href="/">Back to Site</a>
+        </div>
     </div>
 </body>
 </html> 

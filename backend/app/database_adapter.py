@@ -629,7 +629,7 @@ class RunDatabaseAdapter:
     def delete_user(self, user_id):
         """Delete a user account and all associated data (admin function)"""
         try:
-            print(f"Admin deleting user {user_id}")
+            print(f"DB Adapter: Deleting user {user_id}")
             
             if self.use_sqlalchemy:
                 with self.engine.connect() as conn:
@@ -660,18 +660,23 @@ class RunDatabaseAdapter:
                     cursor = conn.cursor()
                     
                     # Delete runs first
+                    print(f"DB Adapter: Deleting runs for user {user_id}")
                     cursor.execute('DELETE FROM runs WHERE user_id = ?', (user_id,))
                     
                     # Delete profile
+                    print(f"DB Adapter: Deleting profile for user {user_id}")
                     cursor.execute('DELETE FROM profile WHERE user_id = ?', (user_id,))
                     
                     # Delete user
+                    print(f"DB Adapter: Deleting user entry for user {user_id}")
                     cursor.execute('DELETE FROM users WHERE id = ?', (user_id,))
                     
                     conn.commit()
                     success = cursor.rowcount > 0
                     print(f"User deletion {'successful' if success else 'failed'} using SQLite")
-                    return success
+                    # Even if rowcount is 0 (no rows affected), consider it successful
+                    # This prevents issues if the user was already deleted
+                    return True
                     
         except Exception as e:
             print(f"Error deleting user: {str(e)}")

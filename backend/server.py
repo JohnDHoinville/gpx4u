@@ -22,7 +22,25 @@ from json import JSONEncoder
 from routes.auth import auth_bp
 from routes.runs import runs_bp
 from routes.profile import profile_bp
-from routes.admin import admin_bp
+
+# Import admin blueprint with error handling
+try:
+    from routes.admin import admin_bp
+    admin_blueprint_available = True
+    print("Successfully imported admin blueprint")
+except ImportError as e:
+    admin_blueprint_available = False
+    print(f"Error importing admin blueprint: {str(e)}")
+    # Create a minimal admin blueprint as a fallback
+    from flask import Blueprint
+    admin_bp = Blueprint('admin_bp', __name__, url_prefix='/admin')
+    
+    @admin_bp.route('/')
+    def admin_home():
+        return jsonify({"error": "Admin module not properly loaded"}), 500
+    
+    print("Created fallback admin blueprint")
+
 from config import config
 import sqlite3
 from sqlalchemy import select, func

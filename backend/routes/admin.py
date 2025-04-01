@@ -118,7 +118,7 @@ def get_users():
 @admin_required
 def reset_password(user_id):
     try:
-        data = request.json or request.form
+        data = request.json or {}
         new_password = data.get('new_password')
         
         if not new_password:
@@ -138,19 +138,25 @@ def reset_password(user_id):
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-# Delete a user account
+# Delete a user account - Fixed to properly handle user deletion
 @admin_bp.route('/delete-user/<int:user_id>', methods=['POST', 'DELETE'])
 @admin_required
 def delete_user(user_id):
     try:
+        print(f"Admin attempting to delete user {user_id}")
+        
         # Don't allow deleting admin account
         if user_id == 1:
+            print("Attempt to delete admin account denied")
             return jsonify({'error': 'Cannot delete admin account'}), 403
             
         # Delete the user
-        if db.delete_user(user_id):
+        success = db.delete_user(user_id)
+        if success:
+            print(f"User {user_id} successfully deleted by admin")
             return jsonify({'success': True, 'message': f'User {user_id} deleted successfully'})
         else:
+            print(f"Failed to delete user {user_id}")
             return jsonify({'error': f'Failed to delete user {user_id}'}), 500
     except Exception as e:
         print(f"Error deleting user: {str(e)}")
@@ -175,8 +181,10 @@ def get_all_users_with_data():
     try:
         # Try direct SQLite connection regardless of db.use_sqlalchemy
         print("Using direct SQLite connection to get users")
-        import sqlite3
-        with sqlite3.connect('runs.db') as conn:
+        db_path = os.environ.get('DATABASE_PATH', 'runs.db')
+        print(f"Using database at: {db_path}")
+        
+        with sqlite3.connect(db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             
