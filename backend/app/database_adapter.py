@@ -583,4 +583,33 @@ class RunDatabaseAdapter:
         except Exception as e:
             print(f"Error deleting user: {str(e)}")
             traceback.print_exc()
+            return False
+    
+    def delete_run(self, run_id):
+        """Delete a run by ID"""
+        try:
+            print(f"Deleting run {run_id}")
+            
+            if self.use_sqlalchemy:
+                with self.engine.connect() as conn:
+                    result = conn.execute(
+                        delete(self.runs)
+                        .where(self.runs.c.id == run_id)
+                    )
+                    conn.commit()
+                    success = result.rowcount > 0
+                    print(f"Run deletion {'successful' if success else 'failed'} using SQLAlchemy")
+                    return success
+            else:
+                with sqlite3.connect(self.db_name) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute('DELETE FROM runs WHERE id = ?', (run_id,))
+                    conn.commit()
+                    success = cursor.rowcount > 0
+                    print(f"Run deletion {'successful' if success else 'failed'} using SQLite")
+                    return success
+                    
+        except Exception as e:
+            print(f"Error deleting run: {str(e)}")
+            traceback.print_exc()
             return False 
