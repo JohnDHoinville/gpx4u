@@ -83,4 +83,33 @@
   font-size: 0.9em;
   color: var(--text-secondary);
   margin: 5px 0;
+}
+
+/* Info tooltip styles */
+.section-title-with-info {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.section-title-with-info h3 {
+  margin: 0;
+  margin-right: 8px;
+}
+
+/* Dark theme support */
+.dark .zone-card {
+  background-color: #2a2a2a;
+}
+
+.dark .zone-header h4 {
+  color: #eee;
+}
+
+.dark .zone-range {
+  color: #bbb;
+}
+
+.dark .zone-description {
+  color: #aaa;
 } 

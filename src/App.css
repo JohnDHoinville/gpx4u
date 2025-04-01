@@ -1881,3 +1881,56 @@ tr:hover {
 .dark .upload-form-container {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
+
+/* Info tooltip */
+.info-tooltip {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: var(--accent-primary, #4a90e2);
+  color: white;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+  margin-left: 8px;
+  cursor: help;
+  position: relative;
+}
+
+.info-tooltip-content {
+  visibility: hidden;
+  background-color: var(--bg-secondary, white);
+  color: var(--text-primary, #333);
+  border: 1px solid var(--border-color, #ddd);
+  border-radius: 6px;
+  padding: 12px;
+  width: 250px;
+  position: absolute;
+  z-index: 100;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 0.3s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  text-align: left;
+  font-weight: normal;
+  line-height: 1.5;
+}
+
+.info-tooltip:hover .info-tooltip-content {
+  visibility: visible;
+  opacity: 1;
+}
+
+.zones-info {
+  display: flex;
+  align-items: center;
+}
+
+.section-title-with-info {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+}
