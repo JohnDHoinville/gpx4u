@@ -455,4 +455,43 @@ class RunDatabaseAdapter:
                     return None
         except Exception as e:
             print(f"Error verifying user: {str(e)}")
-            return None 
+            return None
+
+    def save_profile(self, user_id, age, resting_hr, weight=70, gender=1):
+        """Save user profile information"""
+        try:
+            print(f"Saving profile for user {user_id}:")
+            print(f"Age: {age}, Resting HR: {resting_hr}, Weight: {weight}, Gender: {gender}")
+            
+            if self.use_sqlalchemy:
+                with self.engine.connect() as conn:
+                    result = conn.execute(
+                        update(self.profile)
+                        .where(self.profile.c.user_id == user_id)
+                        .values(
+                            age=age,
+                            resting_hr=resting_hr,
+                            weight=weight,
+                            gender=gender,
+                            updated_at=datetime.utcnow()
+                        )
+                    )
+                    conn.commit()
+                    print("Profile saved successfully using SQLAlchemy")
+                    return True
+            else:
+                with sqlite3.connect(self.db_name) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                        UPDATE profile 
+                        SET age = ?, resting_hr = ?, weight = ?, gender = ?, updated_at = CURRENT_TIMESTAMP 
+                        WHERE user_id = ?
+                    ''', (age, resting_hr, weight, gender, user_id))
+                    conn.commit()
+                    print("Profile saved successfully using SQLite")
+                    return True
+                    
+        except Exception as e:
+            print(f"Error saving profile: {str(e)}")
+            traceback.print_exc()
+            raise e 
