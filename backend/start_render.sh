@@ -1,6 +1,6 @@
 #!/bin/bash
 # Startup script for GPX4U on Render.com
-# This script creates a backup of the database but never modifies the production database
+# This script NEVER modifies the production database - it only creates backups
 
 set -e  # Exit on error
 
@@ -29,20 +29,35 @@ fi
 
 # Check if the database exists
 if [ -f "$DATABASE_PATH" ]; then
-  echo "Found existing database at: $DATABASE_PATH"
+  echo "FOUND EXISTING DATABASE at: $DATABASE_PATH"
   echo "Database size: $(du -h "$DATABASE_PATH" | cut -f1)"
+  echo "*** PRESERVING EXISTING DATABASE - NO MODIFICATIONS WILL BE MADE ***"
+  
+  # Set preservation flag for the application
+  export PRESERVE_DATABASE="true"
 else
   echo "WARNING: No database found at $DATABASE_PATH"
   echo "A new database will be created by the application."
+  
+  # Only in this case, let the application create a new database
+  export PRESERVE_DATABASE="false"
 fi
 
-# Create an automatic backup, but don't modify the original database
-if [ -f "./scripts/backup_db.sh" ]; then
-  echo "Creating database backup..."
-  chmod +x ./scripts/backup_db.sh
-  ./scripts/backup_db.sh
+# Create a backup, but NEVER modify the original database
+if [ -f "$DATABASE_PATH" ]; then
+  BACKUP_DIR="/opt/render/data/backups"
+  mkdir -p "$BACKUP_DIR"
+  BACKUP_FILE="$BACKUP_DIR/runs_$(date +%Y%m%d_%H%M%S).db"
+  echo "Creating backup at: $BACKUP_FILE"
+  cp "$DATABASE_PATH" "$BACKUP_FILE"
+  echo "Backup created successfully"
+  
+  # Keep only the last 5 backups to save space
+  ls -t "$BACKUP_DIR"/*.db 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null || true
+  echo "Current backups:"
+  ls -la "$BACKUP_DIR"/*.db | head -n 5 || echo "No backups found"
 else
-  echo "Warning: Backup script not found at ./scripts/backup_db.sh"
+  echo "No database to back up yet"
 fi
 
 # Get port from environment - Render requires this exact approach

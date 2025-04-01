@@ -249,6 +249,11 @@ class RunDatabaseAdapter:
 
     def _init_sqlite_db(self):
         """Initialize SQLite database"""
+        # Check if we should preserve existing database
+        if os.environ.get('PRESERVE_DATABASE', 'true').lower() == 'true' and os.path.exists(self.db_name):
+            print(f"PRESERVE_DATABASE flag is set - not modifying existing database at {self.db_name}")
+            return
+            
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
             # Add users table
@@ -290,7 +295,7 @@ class RunDatabaseAdapter:
             ''')
             conn.commit()
 
-            # Create default admin user
+            # Check if we need to create default admin user
             cursor.execute('SELECT id FROM users WHERE username = ?', ('admin',))
             if not cursor.fetchone():
                 password_hash = generate_password_hash('admin123')
@@ -304,6 +309,15 @@ class RunDatabaseAdapter:
 
     def _ensure_sqlite_tables(self):
         """Ensure all required tables exist in SQLite without recreating the database"""
+        # Check if we should preserve existing database - in production, don't modify schema
+        preserve_db = os.environ.get('PRESERVE_DATABASE', 'false').lower() == 'true'
+        is_production = os.environ.get('FLASK_ENV', '') == 'production'
+        
+        if preserve_db and is_production:
+            print(f"PRESERVE_DATABASE flag is set in production - not modifying database schema")
+            print(f"Database at {self.db_name} will be used as-is")
+            return
+            
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
             

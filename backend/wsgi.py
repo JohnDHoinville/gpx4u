@@ -9,19 +9,34 @@ sys.path.insert(0, os.path.dirname(__file__))
 # Set production environment
 os.environ['FLASK_ENV'] = 'production'
 
+# Check for database preservation flag
+preserve_db = os.environ.get('PRESERVE_DATABASE', 'true').lower() == 'true'
+if preserve_db:
+    print("PRESERVE_DATABASE flag is set to true - existing database will be preserved")
+else:
+    print("PRESERVE_DATABASE flag is set to false - a new database may be created if needed")
+
 # Get database path from environment
 db_path = os.environ.get('DATABASE_PATH')
 if db_path:
     print(f"Using DATABASE_PATH from environment: {db_path}")
     
-    # Ensure the database directory exists
-    db_dir = os.path.dirname(db_path)
-    if not os.path.exists(db_dir):
-        try:
-            os.makedirs(db_dir)
-            print(f"Created database directory: {db_dir}")
-        except Exception as e:
-            print(f"Warning: Could not create directory {db_dir}: {e}")
+    # Check if the database already exists
+    if os.path.exists(db_path):
+        db_size = os.path.getsize(db_path) / 1024.0
+        print(f"FOUND EXISTING DATABASE at {db_path} (size: {db_size:.2f} KB)")
+        print("*** PRESERVING EXISTING DATABASE - NO MODIFICATIONS WILL BE MADE ***")
+    else:
+        # Ensure the database directory exists
+        db_dir = os.path.dirname(db_path)
+        if not os.path.exists(db_dir):
+            try:
+                os.makedirs(db_dir)
+                print(f"Created database directory: {db_dir}")
+            except Exception as e:
+                print(f"Warning: Could not create directory {db_dir}: {e}")
+                
+        print(f"No existing database found at {db_path} - a new one will be created")
 else:
     # Default to a path in the data directory
     data_dir = os.path.join(os.environ.get('HOME', '.'), 'data')
