@@ -2,6 +2,8 @@
 
 import os
 import sys
+import shutil
+import time
 
 # Add the current directory to the Python path
 sys.path.insert(0, os.path.dirname(__file__))
@@ -29,30 +31,34 @@ if db_path:
         db_size = os.path.getsize(db_path) / 1024.0
         print(f"FOUND EXISTING DATABASE at {db_path} (size: {db_size:.2f} KB)")
         print("*** PRESERVING EXISTING DATABASE - NO MODIFICATIONS WILL BE MADE ***")
+        
+        # Create a backup of the existing database for safety
+        backup_dir = os.path.join(os.path.dirname(db_path), "backups")
+        if not os.path.exists(backup_dir):
+            os.makedirs(backup_dir)
+        
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        backup_path = os.path.join(backup_dir, f"runs_{timestamp}_wsgi.db")
+        try:
+            shutil.copy2(db_path, backup_path)
+            print(f"Created database backup at {backup_path}")
+        except Exception as e:
+            print(f"Warning: Could not create database backup: {e}")
     else:
-        # Check if the database exists in deployment directory - if so, copy it
-        deploy_db = os.path.join(os.path.dirname(__file__), 'runs.db')
-        if os.path.exists(deploy_db):
-            print(f"FOUND DATABASE IN DEPLOYMENT: {deploy_db}")
-            
-            # Ensure the database directory exists
-            db_dir = os.path.dirname(db_path)
-            if not os.path.exists(db_dir):
-                try:
-                    os.makedirs(db_dir)
-                    print(f"Created database directory: {db_dir}")
-                except Exception as e:
-                    print(f"Warning: Could not create directory {db_dir}: {e}")
-                    
-            # Copy the database to persistent storage
+        # Database doesn't exist at persistent location
+        # But we will NOT copy from deployment directory here
+        # This is handled in start_render.sh before this script runs
+        print(f"No existing database found at {db_path}")
+        print(f"A new database will be created if needed (handled by startup script)")
+        
+        # Ensure the database directory exists
+        db_dir = os.path.dirname(db_path)
+        if not os.path.exists(db_dir):
             try:
-                import shutil
-                shutil.copy2(deploy_db, db_path)
-                print(f"Database copied from {deploy_db} to {db_path}")
+                os.makedirs(db_dir)
+                print(f"Created database directory: {db_dir}")
             except Exception as e:
-                print(f"Error copying database: {e}")
-        else:
-            print(f"No existing database found at {db_path} or {deploy_db}")
+                print(f"Warning: Could not create directory {db_dir}: {e}")
 else:
     # Default to a path in the data directory
     data_dir = os.path.join(os.environ.get('HOME', '.'), 'data')

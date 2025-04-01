@@ -35,51 +35,49 @@ if [ ! -d "$db_dir" ]; then
   echo "Database directory created: $db_dir"
 fi
 
-# IMPORTANT: If a database already exists at deployment location but not at DATABASE_PATH, copy it
-deploy_db="/opt/render/project/src/backend/runs.db"
-if [ ! -f "$DATABASE_PATH" ] && [ -f "$deploy_db" ]; then
-  echo "FOUND DATABASE AT DEPLOYMENT LOCATION: $deploy_db"
-  echo "COPYING TO PERSISTENT STORAGE: $DATABASE_PATH"
-  cp "$deploy_db" "$DATABASE_PATH"
-  echo "Database copied successfully"
-fi
-
-# Add extreme fallback checks for other common locations
+# IMPORTANT: Copy deployment database ONLY if persistent database doesn't exist yet
+# AND we're on the first deployment after this change
 if [ ! -f "$DATABASE_PATH" ]; then
-  for potential_db in /opt/render/project/src/runs.db ./runs.db ../runs.db; do
-    if [ -f "$potential_db" ]; then
-      echo "FOUND DATABASE AT: $potential_db"
+  echo "No database exists at persistent location yet: $DATABASE_PATH"
+  
+  deploy_db="/opt/render/project/src/backend/runs.db"
+  if [ -f "$deploy_db" ]; then
+    echo "FOUND DATABASE AT DEPLOYMENT LOCATION: $deploy_db"
+    
+    # Check if this appears to be a template database (under 100KB)
+    db_size=$(stat -c %s "$deploy_db" 2>/dev/null || stat -f %z "$deploy_db")
+    if [ "$db_size" -lt 102400 ]; then
+      echo "WARNING: Deployment database appears to be a small template (${db_size} bytes)"
+      echo "This might be an empty or template database from Git, not a production database"
+      
+      # Still copy it as a starting point if we have no other option
+      echo "COPYING TO PERSISTENT STORAGE (as initial template): $DATABASE_PATH"
+      cp "$deploy_db" "$DATABASE_PATH"
+      echo "Template database copied as a starting point"
+    else
       echo "COPYING TO PERSISTENT STORAGE: $DATABASE_PATH"
-      cp "$potential_db" "$DATABASE_PATH"
+      cp "$deploy_db" "$DATABASE_PATH"
       echo "Database copied successfully"
-      break
     fi
-  done
-fi
-
-# Check if the database exists
-if [ -f "$DATABASE_PATH" ]; then
-  echo "FOUND EXISTING DATABASE at: $DATABASE_PATH"
-  echo "Database size: $(du -h "$DATABASE_PATH" | cut -f1)"
-  echo "*** PRESERVING EXISTING DATABASE - NO MODIFICATIONS WILL BE MADE ***"
-else
-  echo "WARNING: NO DATABASE FOUND at $DATABASE_PATH"
-  echo "This should never happen! Looking for databases in other locations..."
-  
-  # Last-ditch search for any database file
-  find /opt/render -name "runs.db" -type f | while read db_file; do
-    echo "FOUND DATABASE AT: $db_file"
-    echo "COPYING TO PERSISTENT STORAGE: $DATABASE_PATH"
-    cp "$db_file" "$DATABASE_PATH"
-    echo "Database copied successfully"
-    break
-  done
-  
-  # If still no database, create a minimal one
-  if [ ! -f "$DATABASE_PATH" ]; then
-    echo "NO DATABASE FOUND ANYWHERE - Creating a minimal database"
-    echo "This is a last resort and should not normally happen"
+  else
+    echo "No database found at deployment location either"
+    # Check for other database locations as a last resort
+    for potential_db in /opt/render/project/src/runs.db ./runs.db ../runs.db; do
+      if [ -f "$potential_db" ]; then
+        echo "FOUND DATABASE AT: $potential_db"
+        echo "COPYING TO PERSISTENT STORAGE: $DATABASE_PATH"
+        cp "$potential_db" "$DATABASE_PATH"
+        echo "Database copied successfully"
+        break
+      fi
+    done
   fi
+else
+  echo "FOUND EXISTING DATABASE at: $DATABASE_PATH"
+  db_size=$(stat -c %s "$DATABASE_PATH" 2>/dev/null || stat -f %z "$DATABASE_PATH")
+  echo "Database size: $(numfmt --to=iec-i --suffix=B $db_size 2>/dev/null || echo "$db_size bytes")"
+  echo "*** PRESERVING EXISTING DATABASE - NO MODIFICATIONS WILL BE MADE ***"
+  echo "*** IMPORTANT: DATABASE FROM DEPLOYMENT LOCATION WILL BE IGNORED ***"
 fi
 
 # Create a backup, but NEVER modify the original database
