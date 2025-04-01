@@ -7,27 +7,25 @@ services:
     env: python
     plan: starter # Use appropriate plan
     buildCommand: |
-      # Install dependencies with specific versions to prevent conflicts
-      pip install Flask==2.0.1 flask-cors==3.0.10 python-dotenv==0.19.0 psycopg2-binary &&
+      # Install PostgreSQL client if needed
+      pip install psycopg2-binary &&
       # Standard build process
       chmod +x build.sh && ./build.sh &&
-      # Install remaining requirements without dependency resolution
-      pip install -r backend/requirements.txt --no-deps
+      # Install requirements
+      pip install -r backend/requirements.txt
     startCommand: |
-      # Set the database path explicitly to the persistent volume
+      # Set the database path explicitly
       export DATABASE_PATH="/opt/render/data/runs.db" &&
-      # CRITICAL: Never copy over an existing database - this is commented out for safety
-      # [ -f "$DATABASE_PATH" ] || cp -v backend/runs.db "$DATABASE_PATH" 2>/dev/null || true &&
-      # Create a backup of the existing database if it exists
-      if [ -f "$DATABASE_PATH" ]; then
-        mkdir -p /opt/render/data/backups &&
-        cp "$DATABASE_PATH" "/opt/render/data/backups/runs_$(date +%Y%m%d_%H%M%S).db" &&
-        echo "Created backup of existing database"
-      fi &&
-      # Go to backend directory
+      # CRITICAL: FORCE PRESERVE_DATABASE to true
+      export PRESERVE_DATABASE="true" &&
+      # Go to backend and start the server
       cd backend && 
-      # Make start script executable and run it
-      chmod +x start_render.sh && ./start_render.sh
+      if [ -f "./start_render.sh" ]; then
+        chmod +x start_render.sh && ./start_render.sh
+      else
+        # Fallback to direct gunicorn if script doesn't exist
+        gunicorn --workers=2 --bind=0.0.0.0:$PORT --log-level=info wsgi:app
+      fi
     envVars:
       - key: FLASK_APP
         value: server.py

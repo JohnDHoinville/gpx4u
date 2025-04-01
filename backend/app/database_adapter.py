@@ -249,11 +249,43 @@ class RunDatabaseAdapter:
 
     def _init_sqlite_db(self):
         """Initialize SQLite database"""
-        # Check if we should preserve existing database
-        if os.environ.get('PRESERVE_DATABASE', 'true').lower() == 'true' and os.path.exists(self.db_name):
+        # Check environment variables to prevent database initialization
+        prevent_new_db = os.environ.get('PREVENT_NEW_DATABASE', 'false').lower() == 'true'
+        preserve_db = os.environ.get('PRESERVE_DATABASE', 'true').lower() == 'true'
+        is_production = os.environ.get('FLASK_ENV', '') == 'production'
+        
+        # Check for absolute paths that would indicate a persistent database
+        is_persistent_path = self.db_name.startswith('/opt/render/data/')
+        
+        if (prevent_new_db or preserve_db) and is_production and is_persistent_path:
+            print(f"*** CRITICAL: Database initialization prevented by environment flags ***")
+            print(f"PREVENT_NEW_DATABASE={prevent_new_db}, PRESERVE_DATABASE={preserve_db}")
+            print(f"This is a production environment with a persistent database path.")
+            print(f"Will NOT initialize a new database at {self.db_name}")
+            
+            # Instead, we'll check if we need to copy from deployment path
+            deploy_db = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'runs.db')
+            if os.path.exists(deploy_db) and not os.path.exists(self.db_name):
+                print(f"FOUND DATABASE IN DEPLOYMENT: {deploy_db}")
+                print(f"COPYING TO PERSISTENT STORAGE: {self.db_name}")
+                
+                # Ensure target directory exists
+                db_dir = os.path.dirname(self.db_name)
+                if not os.path.exists(db_dir):
+                    os.makedirs(db_dir, exist_ok=True)
+                    
+                # Copy the database
+                import shutil
+                shutil.copy2(deploy_db, self.db_name)
+                print(f"Database copied successfully")
+            return
+        
+        # Regular initialization path - this should NOT run in production with persistent paths
+        if os.path.exists(self.db_name) and preserve_db:
             print(f"PRESERVE_DATABASE flag is set - not modifying existing database at {self.db_name}")
             return
             
+        # Only create tables if absolutely needed - this should rarely happen in production
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
             # Add users table

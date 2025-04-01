@@ -9,12 +9,15 @@ sys.path.insert(0, os.path.dirname(__file__))
 # Set production environment
 os.environ['FLASK_ENV'] = 'production'
 
+# CRITICAL: FORCE DATABASE PRESERVATION IN PRODUCTION
+os.environ['PRESERVE_DATABASE'] = 'true'
+os.environ['PREVENT_NEW_DATABASE'] = 'true'
+print(f"*** CRITICAL: Database preservation forced in WSGI entry point ***")
+print(f"PRESERVE_DATABASE=true, PREVENT_NEW_DATABASE=true")
+
 # Check for database preservation flag
 preserve_db = os.environ.get('PRESERVE_DATABASE', 'true').lower() == 'true'
-if preserve_db:
-    print("PRESERVE_DATABASE flag is set to true - existing database will be preserved")
-else:
-    print("PRESERVE_DATABASE flag is set to false - a new database may be created if needed")
+print(f"PRESERVE_DATABASE flag is set to {preserve_db} - {'existing database will be preserved' if preserve_db else 'a new database may be created if needed'}")
 
 # Get database path from environment
 db_path = os.environ.get('DATABASE_PATH')
@@ -27,16 +30,29 @@ if db_path:
         print(f"FOUND EXISTING DATABASE at {db_path} (size: {db_size:.2f} KB)")
         print("*** PRESERVING EXISTING DATABASE - NO MODIFICATIONS WILL BE MADE ***")
     else:
-        # Ensure the database directory exists
-        db_dir = os.path.dirname(db_path)
-        if not os.path.exists(db_dir):
+        # Check if the database exists in deployment directory - if so, copy it
+        deploy_db = os.path.join(os.path.dirname(__file__), 'runs.db')
+        if os.path.exists(deploy_db):
+            print(f"FOUND DATABASE IN DEPLOYMENT: {deploy_db}")
+            
+            # Ensure the database directory exists
+            db_dir = os.path.dirname(db_path)
+            if not os.path.exists(db_dir):
+                try:
+                    os.makedirs(db_dir)
+                    print(f"Created database directory: {db_dir}")
+                except Exception as e:
+                    print(f"Warning: Could not create directory {db_dir}: {e}")
+                    
+            # Copy the database to persistent storage
             try:
-                os.makedirs(db_dir)
-                print(f"Created database directory: {db_dir}")
+                import shutil
+                shutil.copy2(deploy_db, db_path)
+                print(f"Database copied from {deploy_db} to {db_path}")
             except Exception as e:
-                print(f"Warning: Could not create directory {db_dir}: {e}")
-                
-        print(f"No existing database found at {db_path} - a new one will be created")
+                print(f"Error copying database: {e}")
+        else:
+            print(f"No existing database found at {db_path} or {deploy_db}")
 else:
     # Default to a path in the data directory
     data_dir = os.path.join(os.environ.get('HOME', '.'), 'data')
