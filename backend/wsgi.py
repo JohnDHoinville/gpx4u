@@ -225,7 +225,7 @@ except ModuleNotFoundError:
             application = server.app
         except:
             # Last resort fallback
-            from server import app
+from server import app
             application = app
 
 # For Render.com Gunicorn configuration

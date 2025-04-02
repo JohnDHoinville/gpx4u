@@ -682,6 +682,17 @@ const formatTime = (minutes) => {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
+// Helper function to format time in hours, minutes and seconds
+const formatRunTime = (timeInMinutes) => {
+  if (!timeInMinutes) return "0:00:00";
+  
+  const hours = Math.floor(timeInMinutes / 60);
+  const minutes = Math.floor(timeInMinutes % 60);
+  const seconds = Math.round((timeInMinutes % 1) * 60);
+  
+  return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+};
+
 // Add this near the top of the file with other context definitions
 const TableContext = createContext();
 
@@ -1073,6 +1084,78 @@ const calculateTotalPace = (results) => {
   return null;
 };
 
+// Helper function to calculate time from distance and pace
+const calculateTimeFromPaceAndDistance = (pace, distance) => {
+  if (!pace || !distance || pace === Infinity || isNaN(pace) || isNaN(distance)) {
+    return 0;
+  }
+  return pace * distance; // This gives time in minutes
+};
+
+// Calculate total run time from segments
+const calculateTotalRunTime = (results) => {
+  if (!results) return 0;
+  
+  const fastSegments = results.fast_segments || [];
+  const slowSegments = results.slow_segments || [];
+  
+  let totalTime = 0;
+  
+  // Add up time from fast segments
+  for (const segment of fastSegments) {
+    if (segment.time_diff) {
+      totalTime += segment.time_diff;
+    } else {
+      totalTime += calculateTimeFromPaceAndDistance(segment.pace, segment.distance);
+    }
+  }
+  
+  // Add up time from slow segments
+  for (const segment of slowSegments) {
+    if (segment.time_diff) {
+      totalTime += segment.time_diff;
+    } else {
+      totalTime += calculateTimeFromPaceAndDistance(segment.pace, segment.distance);
+    }
+  }
+  
+  return totalTime;
+};
+
+// Calculate time for fast segments
+const calculateFastSegmentsTime = (results) => {
+  if (!results || !results.fast_segments) return 0;
+  
+  let totalTime = 0;
+  
+  for (const segment of results.fast_segments) {
+    if (segment.time_diff) {
+      totalTime += segment.time_diff;
+    } else {
+      totalTime += calculateTimeFromPaceAndDistance(segment.pace, segment.distance);
+    }
+  }
+  
+  return totalTime;
+};
+
+// Calculate time for slow segments
+const calculateSlowSegmentsTime = (results) => {
+  if (!results || !results.slow_segments) return 0;
+  
+  let totalTime = 0;
+  
+  for (const segment of results.slow_segments) {
+    if (segment.time_diff) {
+      totalTime += segment.time_diff;
+    } else {
+      totalTime += calculateTimeFromPaceAndDistance(segment.pace, segment.distance);
+    }
+  }
+  
+  return totalTime;
+};
+
 function App() {
   const API_URL = 'http://localhost:5001';
   // Add the ref for the upload form
@@ -1195,15 +1278,30 @@ function App() {
     setFileName(file.name);
     setError('');
 
-    // Extract date from filename
-    const dateMatch = file.name.match(/\d{4}-\d{2}-\d{2}/);
-    if (dateMatch) {
-      setRunDate(dateMatch[0]);
-    } else {
-      // If no date in filename, use current date
-      const today = new Date();
-      setRunDate(today.toISOString().split('T')[0]);
-    }
+    // Read the file to extract date from GPX metadata
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target.result;
+      const timeMatch = content.match(/<time>(.*?)<\/time>/);
+      
+      if (timeMatch && timeMatch[1]) {
+        // Extract the date part from ISO format (YYYY-MM-DDThh:mm:ssZ)
+        const dateStr = timeMatch[1].split('T')[0];
+        setRunDate(dateStr);
+      } else {
+        // Fallback to filename pattern or current date
+        const dateMatch = file.name.match(/\d{4}-\d{2}-\d{2}/);
+        if (dateMatch) {
+          setRunDate(dateMatch[0]);
+        } else {
+          // If no date in filename, use current date
+          const today = new Date();
+          setRunDate(today.toISOString().split('T')[0]);
+        }
+      }
+    };
+    
+    reader.readAsText(file);
   };
 
   const handleSaveRun = async (results) => {
@@ -2596,9 +2694,14 @@ function App() {
                     <div className="results-summary">
                       <div className="results-grid">
                         <div className="result-item">
-                          <h3>Total Distance</h3>
-                          <p className="result-value">{formatNumber(results?.total_distance || 0)}</p>
-                          <p className="result-unit">miles</p>
+                          <h3>Total Time</h3>
+                          <p className="result-value">{formatRunTime(calculateTotalRunTime(results))}</p>
+                          <p className="result-unit">h:mm:ss</p>
+                          <div className="distance-item">
+                            <p className="result-label">Total Distance</p>
+                            <p className="result-value-secondary">{formatNumber(results?.total_distance || 0)}</p>
+                            <p className="result-unit">miles</p>
+                          </div>
                           <div className="avg-pace">
                             <p className="result-label">Average Pace</p>
                             <p className="result-value-secondary">
@@ -2614,9 +2717,14 @@ function App() {
                         </div>
                         
                         <div className="result-item">
-                          <h3>Fast Distance</h3>
-                          <p className="result-value">{formatNumber(results?.fast_distance || 0)}</p>
-                          <p className="result-unit">miles</p>
+                          <h3>Fast Time</h3>
+                          <p className="result-value">{formatRunTime(calculateFastSegmentsTime(results))}</p>
+                          <p className="result-unit">h:mm:ss</p>
+                          <div className="distance-item">
+                            <p className="result-label">Fast Distance</p>
+                            <p className="result-value-secondary">{formatNumber(results?.fast_distance || 0)}</p>
+                            <p className="result-unit">miles</p>
+                          </div>
                           <p className="result-percentage">
                             ({formatNumber(results?.percentage_fast || 0, 1)}% of total)
                           </p>
@@ -2635,9 +2743,14 @@ function App() {
                         </div>
 
                         <div className="result-item">
-                          <h3>Slow Distance</h3>
-                          <p className="result-value">{formatNumber(results?.slow_distance || 0)}</p>
-                          <p className="result-unit">miles</p>
+                          <h3>Slow Time</h3>
+                          <p className="result-value">{formatRunTime(calculateSlowSegmentsTime(results))}</p>
+                          <p className="result-unit">h:mm:ss</p>
+                          <div className="distance-item">
+                            <p className="result-label">Slow Distance</p>
+                            <p className="result-value-secondary">{formatNumber(results?.slow_distance || 0)}</p>
+                            <p className="result-unit">miles</p>
+                          </div>
                           <p className="result-percentage">
                             ({formatNumber(results?.percentage_slow || 0, 1)}% of total)
                           </p>
