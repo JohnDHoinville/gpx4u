@@ -524,4 +524,207 @@ def db_download(filename):
     except Exception as e:
         print(f"Error downloading backup: {str(e)}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500 
+        return jsonify({'error': str(e)}), 500
+
+# Static upload page route as a fallback
+@admin_bp.route('/db_upload_page', methods=['GET'])
+@admin_required
+def db_upload_page():
+    """Serve the database upload page directly"""
+    html_content = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPX4U Database Upload</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    .alert {
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 4px;
+    }
+    .alert-success {
+      background-color: #dff0d8;
+      color: #3c763d;
+      border: 1px solid #d6e9c6;
+    }
+    .alert-danger {
+      background-color: #f2dede;
+      color: #a94442;
+      border: 1px solid #ebccd1;
+    }
+    .hidden {
+      display: none;
+    }
+    #status {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>GPX4U Database Upload</h1>
+  
+  <div class="card">
+    <h2>Upload Database File</h2>
+    <p>Use this form to upload your SQLite database file to restore your data.</p>
+    
+    <form id="uploadForm" enctype="multipart/form-data">
+      <div class="form-group">
+        <label for="file">Select Database File:</label>
+        <input type="file" id="file" name="file" accept=".db" required>
+      </div>
+      
+      <button type="submit">Upload Database</button>
+    </form>
+    
+    <div id="status" class="hidden"></div>
+  </div>
+  
+  <div class="card">
+    <h2>Next Steps</h2>
+    <p>After uploading your database:</p>
+    <ol>
+      <li>Click the "Yes, Restore Now" button when prompted, or</li>
+      <li>Go to the admin dashboard to complete the restoration</li>
+    </ol>
+  </div>
+
+  <script>
+    document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const fileInput = document.getElementById('file');
+      const file = fileInput.files[0];
+      const statusDiv = document.getElementById('status');
+      
+      if (!file) {
+        statusDiv.className = 'alert alert-danger';
+        statusDiv.textContent = 'Please select a file to upload.';
+        statusDiv.classList.remove('hidden');
+        return;
+      }
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      statusDiv.className = 'alert';
+      statusDiv.textContent = 'Uploading...';
+      statusDiv.classList.remove('hidden');
+      
+      try {
+        const response = await fetch('/admin/db_upload', {
+          method: 'POST',
+          body: formData,
+          credentials: 'include'
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+          statusDiv.className = 'alert alert-success';
+          statusDiv.innerHTML = `
+            <strong>Success!</strong> Database uploaded successfully.<br>
+            Location: ${result.path}<br>
+            Size: ${formatBytes(result.size)}<br>
+            Users: ${result.user_count}<br>
+            Runs: ${result.run_count}<br>
+            <hr>
+            <p>Would you like to restore this database now?</p>
+            <button id="restoreNowBtn" class="btn btn-success">Yes, Restore Now</button>
+            <button id="cancelRestoreBtn" class="btn btn-secondary">Cancel</button>
+          `;
+          
+          document.getElementById('restoreNowBtn').addEventListener('click', async function() {
+            statusDiv.innerHTML = '<div class="alert">Restoring database... This may take a moment.</div>';
+            
+            try {
+              const restoreResponse = await fetch('/admin/db_restore', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                credentials: 'include'
+              });
+              
+              const restoreResult = await restoreResponse.json();
+              
+              if (restoreResponse.ok) {
+                statusDiv.innerHTML = `
+                  <div class="alert alert-success">
+                    <strong>Database restored successfully!</strong><br>
+                    <p>Return to <a href="/admin/dashboard">Admin Dashboard</a> or reload in 3 seconds...</p>
+                  </div>
+                `;
+                
+                setTimeout(() => {
+                  window.location.reload();
+                }, 3000);
+              } else {
+                throw new Error(restoreResult.error || 'Restore failed');
+              }
+            } catch (error) {
+              statusDiv.innerHTML = `<div class="alert alert-danger">Error during restore: ${error.message}</div>`;
+            }
+          });
+          
+          document.getElementById('cancelRestoreBtn').addEventListener('click', function() {
+            statusDiv.innerHTML = '<div class="alert">Restore cancelled. You can still restore from the Admin Dashboard.</div>';
+          });
+        } else {
+          statusDiv.className = 'alert alert-danger';
+          statusDiv.textContent = `Error: ${result.error || 'Upload failed'}`;
+        }
+      } catch (error) {
+        statusDiv.className = 'alert alert-danger';
+        statusDiv.textContent = `Error: ${error.message || 'Unknown error occurred'}`;
+      }
+    });
+    
+    function formatBytes(bytes, decimals = 2) {
+      if (bytes === 0) return '0 Bytes';
+      
+      const k = 1024;
+      const dm = decimals < 0 ? 0 : decimals;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+      
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    }
+  </script>
+</body>
+</html>
+    """
+    return html_content 
