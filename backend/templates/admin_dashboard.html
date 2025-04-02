@@ -309,6 +309,42 @@
                 {% endif %}
             </tbody>
         </table>
+
+        <!-- Add Database Management Section to Admin Dashboard -->
+        <div class="card mt-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Database Management</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-header">Database Backup</div>
+                            <div class="card-body">
+                                <p>Create a backup of the current database.</p>
+                                <button id="backupDbBtn" class="btn btn-secondary">Backup Database</button>
+                                <div id="backupStatus" class="mt-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-header">Database Restore</div>
+                            <div class="card-body">
+                                <p>Upload and restore a database from backup.</p>
+                                <form id="dbRestoreForm" enctype="multipart/form-data">
+                                    <div class="form-group">
+                                        <input type="file" class="form-control-file" id="dbFile" name="file" accept=".db" required>
+                                    </div>
+                                    <button type="submit" class="btn btn-warning">Upload & Restore</button>
+                                </form>
+                                <div id="restoreStatus" class="mt-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Reset Password Modal -->
@@ -434,6 +470,150 @@
                 event.target.style.display = 'none';
             }
         }
+
+        // Add JavaScript for the Database Management functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            // Database Restore functionality
+            const dbRestoreForm = document.getElementById('dbRestoreForm');
+            const restoreStatus = document.getElementById('restoreStatus');
+            
+            dbRestoreForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const fileInput = document.getElementById('dbFile');
+                const file = fileInput.files[0];
+                
+                if (!file) {
+                    restoreStatus.innerHTML = '<div class="alert alert-danger">Please select a database file</div>';
+                    return;
+                }
+                
+                // Create form data
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                // Show loading message
+                restoreStatus.innerHTML = '<div class="alert alert-info">Uploading database...</div>';
+                
+                try {
+                    // Upload the database file
+                    const uploadResponse = await fetch('/admin/db_upload', {
+                        method: 'POST',
+                        body: formData,
+                        credentials: 'include'
+                    });
+                    
+                    const uploadResult = await uploadResponse.json();
+                    
+                    if (!uploadResponse.ok) {
+                        throw new Error(uploadResult.error || 'Upload failed');
+                    }
+                    
+                    // Show success with restore instructions
+                    restoreStatus.innerHTML = `
+                        <div class="alert alert-success">
+                            <strong>Upload successful!</strong><br>
+                            File size: ${formatBytes(uploadResult.size)}<br>
+                            <hr>
+                            <p>Would you like to restore this database now?</p>
+                            <button id="restoreNowBtn" class="btn btn-sm btn-success">Yes, Restore Now</button>
+                            <button id="cancelRestoreBtn" class="btn btn-sm btn-secondary ml-2">Cancel</button>
+                        </div>
+                    `;
+                    
+                    // Add event listener for restore button
+                    document.getElementById('restoreNowBtn').addEventListener('click', async function() {
+                        restoreStatus.innerHTML = '<div class="alert alert-info">Restoring database... This may take a moment.</div>';
+                        
+                        try {
+                            const restoreResponse = await fetch('/admin/db_restore', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                credentials: 'include'
+                            });
+                            
+                            const restoreResult = await restoreResponse.json();
+                            
+                            if (!restoreResponse.ok) {
+                                throw new Error(restoreResult.error || 'Restore failed');
+                            }
+                            
+                            restoreStatus.innerHTML = `
+                                <div class="alert alert-success">
+                                    <strong>Database restored successfully!</strong><br>
+                                    <p>Reloading page in 3 seconds...</p>
+                                </div>
+                            `;
+                            
+                            // Reload the page after 3 seconds
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 3000);
+                            
+                        } catch (error) {
+                            restoreStatus.innerHTML = `<div class="alert alert-danger">Error during restore: ${error.message}</div>`;
+                        }
+                    });
+                    
+                    // Add event listener for cancel button
+                    document.getElementById('cancelRestoreBtn').addEventListener('click', function() {
+                        restoreStatus.innerHTML = '<div class="alert alert-secondary">Restore cancelled</div>';
+                    });
+                    
+                } catch (error) {
+                    restoreStatus.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+                }
+            });
+            
+            // Database Backup functionality
+            const backupDbBtn = document.getElementById('backupDbBtn');
+            const backupStatus = document.getElementById('backupStatus');
+            
+            backupDbBtn.addEventListener('click', async function() {
+                backupStatus.innerHTML = '<div class="alert alert-info">Creating backup...</div>';
+                
+                try {
+                    const response = await fetch('/admin/db_backup', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        credentials: 'include'
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (!response.ok) {
+                        throw new Error(result.error || 'Backup failed');
+                    }
+                    
+                    backupStatus.innerHTML = `
+                        <div class="alert alert-success">
+                            <strong>Backup created successfully!</strong><br>
+                            <a href="/admin/db_download/${result.filename}" class="btn btn-sm btn-primary mt-2">Download Backup</a>
+                        </div>
+                    `;
+                    
+                } catch (error) {
+                    backupStatus.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+                }
+            });
+            
+            // Helper function to format bytes
+            function formatBytes(bytes, decimals = 2) {
+                if (bytes === 0) return '0 Bytes';
+                
+                const k = 1024;
+                const dm = decimals < 0 ? 0 : decimals;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+                
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+            }
+        });
     </script>
 </body>
 </html> 

@@ -1,9 +1,11 @@
-from flask import Blueprint, request, jsonify, session, abort, render_template, redirect, url_for
+from flask import Blueprint, request, jsonify, session, abort, render_template, redirect, url_for, send_file
 import traceback
 from functools import wraps
 from werkzeug.security import generate_password_hash
 from sqlalchemy import select, func
 from datetime import datetime
+import shutil
+import subprocess
 
 # Import the database adapter
 import sys
@@ -324,13 +326,11 @@ def get_all_users_with_data():
         except:
             return []
 
-# Modify the temporary upload route to skip authentication
-@admin_bp.route('/temp_upload_db', methods=['POST'])
-def temp_upload_db():
-    """
-    TEMPORARY ROUTE: Allows uploading a database file without authentication.
-    This route should be removed after database restoration.
-    """
+# Database management routes
+@admin_bp.route('/db_upload', methods=['POST'])
+@admin_required
+def db_upload():
+    """Upload a database file to the server"""
     try:
         if 'file' not in request.files:
             return jsonify({'error': 'No file part'}), 400
@@ -339,19 +339,189 @@ def temp_upload_db():
         if not file or file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
             
-        # Save to the backend directory
-        file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploaded_runs.db')
-        file.save(file_path)
+        # Validate file is a SQLite database
+        if not file.filename.endswith('.db'):
+            return jsonify({'error': 'File must be a SQLite database (.db)'}), 400
+            
+        # Save to a temporary location
+        upload_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploaded_runs.db')
+        file.save(upload_path)
         
-        file_size = os.path.getsize(file_path)
+        file_size = os.path.getsize(upload_path)
         
-        print(f"Database file uploaded successfully to {file_path} ({file_size} bytes)")
+        print(f"Database file uploaded successfully to {upload_path} ({file_size} bytes)")
+        
+        # Basic validation that this is a valid SQLite database with expected tables
+        try:
+            import sqlite3
+            with sqlite3.connect(upload_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                tables = [row[0] for row in cursor.fetchall()]
+                
+                # Check for essential tables
+                required_tables = ['users', 'profile', 'runs']
+                missing_tables = [table for table in required_tables if table not in tables]
+                
+                if missing_tables:
+                    os.remove(upload_path)  # Delete invalid file
+                    return jsonify({
+                        'error': f'Invalid database structure. Missing tables: {", ".join(missing_tables)}'
+                    }), 400
+                
+                # Check user count
+                cursor.execute("SELECT COUNT(*) FROM users")
+                user_count = cursor.fetchone()[0]
+                
+                # Check run count
+                cursor.execute("SELECT COUNT(*) FROM runs")
+                run_count = cursor.fetchone()[0]
+                
+                print(f"Validated database: {user_count} users, {run_count} runs")
+        except Exception as e:
+            os.remove(upload_path)  # Delete invalid file
+            return jsonify({'error': f'Invalid SQLite database: {str(e)}'}), 400
         
         return jsonify({
             'message': 'Database file uploaded successfully',
-            'path': file_path,
-            'size': file_size
+            'path': upload_path,
+            'size': file_size,
+            'user_count': user_count,
+            'run_count': run_count
         })
     except Exception as e:
         print(f"Error uploading database: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/db_restore', methods=['POST'])
+@admin_required
+def db_restore():
+    """Restore the database from the uploaded file"""
+    try:
+        uploaded_db = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploaded_runs.db')
+        
+        if not os.path.exists(uploaded_db):
+            return jsonify({'error': 'No uploaded database found. Please upload a database first.'}), 400
+        
+        # Get the target database path
+        db_path = os.environ.get('DATABASE_PATH')
+        if not db_path:
+            db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'runs.db')
+            
+        print(f"Restoring database from {uploaded_db} to {db_path}")
+        
+        # Create a backup of the current database
+        backup_path = f"{db_path}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        if os.path.exists(db_path):
+            shutil.copy2(db_path, backup_path)
+            print(f"Backup created at {backup_path}")
+        
+        # Copy the uploaded database to the target location
+        shutil.copy2(uploaded_db, db_path)
+        
+        # Verify the copy was successful
+        if os.path.exists(db_path):
+            db_size = os.path.getsize(db_path)
+            print(f"Database restored successfully. Size: {db_size} bytes")
+            
+            # Run the restore script if it exists (Render-specific)
+            restore_script = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'restore_db_auto.sh')
+            if os.path.exists(restore_script):
+                try:
+                    # Make sure it's executable
+                    subprocess.run(['chmod', '+x', restore_script], check=True)
+                    # Run the script
+                    result = subprocess.run([restore_script], 
+                                           capture_output=True, 
+                                           text=True,
+                                           check=False)
+                    print(f"Restore script output: {result.stdout}")
+                    if result.stderr:
+                        print(f"Restore script errors: {result.stderr}")
+                except Exception as e:
+                    print(f"Error running restore script: {str(e)}")
+            
+            return jsonify({
+                'message': 'Database restored successfully',
+                'backup_path': backup_path,
+                'size': db_size
+            })
+        else:
+            return jsonify({'error': 'Failed to restore database. Target file not found after copy.'}), 500
+    except Exception as e:
+        print(f"Error restoring database: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/db_backup', methods=['POST'])
+@admin_required
+def db_backup():
+    """Create a backup of the current database"""
+    try:
+        # Get the current database path
+        db_path = os.environ.get('DATABASE_PATH')
+        if not db_path:
+            db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'runs.db')
+        
+        if not os.path.exists(db_path):
+            return jsonify({'error': 'Database not found at expected location'}), 404
+        
+        # Create a backup filename with timestamp
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        backup_filename = f"gpx4u_backup_{timestamp}.db"
+        backup_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', backup_filename)
+        
+        # Create static directory if it doesn't exist
+        os.makedirs(os.path.dirname(backup_path), exist_ok=True)
+        
+        # Copy the database to the backup location
+        shutil.copy2(db_path, backup_path)
+        
+        if os.path.exists(backup_path):
+            backup_size = os.path.getsize(backup_path)
+            print(f"Database backup created at {backup_path} ({backup_size} bytes)")
+            
+            return jsonify({
+                'message': 'Database backup created successfully',
+                'filename': backup_filename,
+                'path': backup_path,
+                'size': backup_size
+            })
+        else:
+            return jsonify({'error': 'Failed to create backup. Backup file not found after copy.'}), 500
+    except Exception as e:
+        print(f"Error creating database backup: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/db_download/<filename>', methods=['GET'])
+@admin_required
+def db_download(filename):
+    """Download a database backup file"""
+    try:
+        # Validate filename to prevent directory traversal
+        if '..' in filename or '/' in filename:
+            return jsonify({'error': 'Invalid filename'}), 400
+            
+        # Only allow .db files
+        if not filename.endswith('.db'):
+            return jsonify({'error': 'Invalid file type'}), 400
+        
+        # Construct the file path
+        file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', filename)
+        
+        if not os.path.exists(file_path):
+            return jsonify({'error': 'Backup file not found'}), 404
+        
+        # Return the file as an attachment
+        return send_file(
+            file_path,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/octet-stream'
+        )
+    except Exception as e:
+        print(f"Error downloading backup: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500 
