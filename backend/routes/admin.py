@@ -324,9 +324,13 @@ def get_all_users_with_data():
         except:
             return []
 
-# Add temporary database upload route (DELETE THIS AFTER RESTORING DATABASE)
+# Modify the temporary upload route to skip authentication
 @admin_bp.route('/temp_upload_db', methods=['POST'])
 def temp_upload_db():
+    """
+    TEMPORARY ROUTE: Allows uploading a database file without authentication.
+    This route should be removed after database restoration.
+    """
     try:
         if 'file' not in request.files:
             return jsonify({'error': 'No file part'}), 400
@@ -341,10 +345,13 @@ def temp_upload_db():
         
         file_size = os.path.getsize(file_path)
         
+        print(f"Database file uploaded successfully to {file_path} ({file_size} bytes)")
+        
         return jsonify({
             'message': 'Database file uploaded successfully',
             'path': file_path,
             'size': file_size
         })
     except Exception as e:
+        print(f"Error uploading database: {str(e)}")
         return jsonify({'error': str(e)}), 500 
