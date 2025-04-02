@@ -1075,7 +1075,9 @@ const calculateTotalPace = (results) => {
 
 function App() {
   const API_URL = 'http://localhost:5001';
-
+  // Add the ref for the upload form
+  const uploadFormRef = useRef(null);
+  
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
@@ -2465,6 +2467,26 @@ function App() {
     }
   }, [results]);
 
+  // Add useEffect for handling click outside
+  useEffect(() => {
+    // Function to handle clicks outside the upload form
+    function handleClickOutside(event) {
+      if (uploadFormRef.current && !uploadFormRef.current.contains(event.target) && showUploadForm) {
+        setShowUploadForm(false);
+      }
+    }
+    
+    // Add event listener when the form is shown
+    if (showUploadForm) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
+    // Clean up
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showUploadForm]);
+
   return (
     <ThemeProvider>
       <TableProvider>
@@ -2499,62 +2521,65 @@ function App() {
                 )}
                 
                 {showUploadForm && (
-                  <div className="upload-form-container">
-                    <form onSubmit={handleSubmit} className="upload-form">
-                      <div className="upload-header">
-                        <h2>Upload GPX File {runDate && `(${runDate})`}</h2>
+                  <>
+                    <div className="modal-overlay" onClick={() => setShowUploadForm(false)}></div>
+                    <div className="upload-form-container">
+                      <form onSubmit={handleSubmit} className="upload-form" ref={uploadFormRef}>
+                        <div className="upload-header">
+                          <h2>Upload GPX File {runDate && `(${runDate})`}</h2>
+                          <button 
+                            type="button" 
+                            className="close-upload-button"
+                            onClick={() => setShowUploadForm(false)}
+                          >
+                            ×
+                          </button>
+                        </div>
+                        
+                        <div className="upload-container">
+                          <label className="file-input-label" htmlFor="gpxFile">
+                            <div className="file-input-text">
+                              {fileName ? fileName : 'Choose GPX file'}
+                            </div>
+                            <div className="file-input-button">Browse</div>
+                          </label>
+                          <input
+                            type="file"
+                            id="gpxFile"
+                            accept=".gpx"
+                            onChange={handleFileChange}
+                            className="file-input"
+                            required
+                          />
+                        </div>
+                        
+                        <div className="form-group">
+                          <label htmlFor="paceLimit">
+                            Target Pace (min/mile)
+                            <InfoTooltip text="Enter your target pace in minutes per mile. Segments below this pace will be considered 'fast'." />
+                          </label>
+                          <input
+                            type="number"
+                            id="paceLimit"
+                            value={paceLimit}
+                            onChange={(e) => setPaceLimit(e.target.value)}
+                            step="0.01"
+                            min="4"
+                            max="20"
+                            placeholder="Enter target pace"
+                          />
+                        </div>
+                        
                         <button 
-                          type="button" 
-                          className="close-upload-button"
-                          onClick={() => setShowUploadForm(false)}
+                          type="submit" 
+                          className="submit-button"
+                          disabled={loading}
                         >
-                          ×
+                          {loading ? 'Analyzing...' : 'Analyze Run'}
                         </button>
-                      </div>
-                      
-                      <div className="upload-container">
-                        <label className="file-input-label" htmlFor="gpxFile">
-                          <div className="file-input-text">
-                            {fileName ? fileName : 'Choose GPX file'}
-                          </div>
-                          <div className="file-input-button">Browse</div>
-                        </label>
-                        <input
-                          type="file"
-                          id="gpxFile"
-                          accept=".gpx"
-                          onChange={handleFileChange}
-                          className="file-input"
-                          required
-                        />
-                      </div>
-                      
-                      <div className="form-group">
-                        <label htmlFor="paceLimit">
-                          Target Pace (min/mile)
-                          <InfoTooltip text="Enter your target pace in minutes per mile. Segments below this pace will be considered 'fast'." />
-                        </label>
-                        <input
-                          type="number"
-                          id="paceLimit"
-                          value={paceLimit}
-                          onChange={(e) => setPaceLimit(e.target.value)}
-                          step="0.01"
-                          min="4"
-                          max="20"
-                          placeholder="Enter target pace"
-                        />
-                      </div>
-                      
-                      <button 
-                        type="submit" 
-                        className="submit-button"
-                        disabled={loading}
-                      >
-                        {loading ? 'Analyzing...' : 'Analyze Run'}
-                      </button>
-                    </form>
-                  </div>
+                      </form>
+                    </div>
+                  </>
                 )}
 
                 {loading && <LoadingOverlay />}
