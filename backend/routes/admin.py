@@ -102,6 +102,72 @@ def dashboard():
         print(f"\n=== ADMIN DASHBOARD DEBUG ===")
         print(f"Users data type: {type(users)}")
         print(f"Users count: {len(users) if users else 0}")
+        
+        # Initialize values
+        total_runs = 0
+        total_distance = 0
+        max_runs = 0
+        db_path = os.environ.get('DATABASE_PATH', 'runs.db')
+        db_size = "Unknown"
+        
+        # Try to get additional statistics from the database
+        try:
+            import sqlite3
+            
+            # Check if the database exists
+            if not os.path.exists(db_path):
+                print(f"WARNING: Database not found at {db_path}")
+                # Try alternate locations
+                alternate_paths = [
+                    '/var/render/data/runs.db',  # Correct Render.com persistent storage path
+                    'runs.db',
+                    '../runs.db',
+                    './runs.db',
+                    '/opt/render/data/runs.db',
+                    '/opt/render/project/src/backend/runs.db',
+                    '/opt/render/project/src/runs.db'
+                ]
+                
+                for alt_path in alternate_paths:
+                    if os.path.exists(alt_path):
+                        print(f"Found database at alternate location: {alt_path}")
+                        db_path = alt_path
+                        break
+            
+            # Get database size
+            if os.path.exists(db_path):
+                size_bytes = os.path.getsize(db_path)
+                if size_bytes < 1024:
+                    db_size = f"{size_bytes} bytes"
+                elif size_bytes < 1024 * 1024:
+                    db_size = f"{size_bytes/1024:.1f} KB"
+                else:
+                    db_size = f"{size_bytes/(1024*1024):.1f} MB"
+                
+                # Connect to the database and get statistics
+                with sqlite3.connect(db_path) as conn:
+                    conn.row_factory = sqlite3.Row
+                    cursor = conn.cursor()
+                    
+                    # Get total runs
+                    cursor.execute('SELECT COUNT(*) FROM runs')
+                    total_runs = cursor.fetchone()[0]
+                    
+                    # Get max runs per user for progress bar
+                    if users and len(users) > 0:
+                        max_runs = max([user.get('run_count', 0) for user in users])
+                    
+                    # Get total distance
+                    cursor.execute('SELECT SUM(total_distance) FROM runs')
+                    result = cursor.fetchone()
+                    if result and result[0] is not None:
+                        total_distance = result[0]
+                        
+                    print(f"Total runs: {total_runs}, Total distance: {total_distance} miles, Max runs per user: {max_runs}")
+        except Exception as e:
+            print(f"Error getting database statistics: {str(e)}")
+            traceback.print_exc()
+        
         if users and len(users) > 0:
             print(f"Sample user: {users[0]}")
         else:
@@ -112,6 +178,24 @@ def dashboard():
                 import sqlite3
                 db_path = os.environ.get('DATABASE_PATH', 'runs.db')
                 print(f"Attempting direct database access at: {db_path}")
+                
+                # Check if the database exists and try alternate locations if needed
+                if not os.path.exists(db_path):
+                    alternate_paths = [
+                        '/var/render/data/runs.db',  # Correct Render.com persistent storage path
+                        'runs.db',
+                        '../runs.db',
+                        './runs.db',
+                        '/opt/render/data/runs.db',
+                        '/opt/render/project/src/backend/runs.db',
+                        '/opt/render/project/src/runs.db'
+                    ]
+                    
+                    for alt_path in alternate_paths:
+                        if os.path.exists(alt_path):
+                            print(f"Found database at alternate location: {alt_path}")
+                            db_path = alt_path
+                            break
                 
                 with sqlite3.connect(db_path) as conn:
                     conn.row_factory = sqlite3.Row
@@ -153,7 +237,15 @@ def dashboard():
                 }]
                 print("Using hardcoded admin user as last resort")
         
-        return render_template('admin_dashboard.html', users=users or [], now=datetime.now)
+        # Pass all the collected data to the template
+        return render_template('admin_dashboard.html', 
+                              users=users or [], 
+                              now=datetime.now,
+                              total_runs=total_runs,
+                              total_distance=total_distance,
+                              max_runs=max_runs,
+                              db_path=db_path,
+                              db_size=db_size)
     except Exception as e:
         print(f"Dashboard error: {str(e)}")
         traceback.print_exc()
@@ -245,6 +337,7 @@ def get_all_users_with_data():
             print(f"WARNING: Database not found at {db_path}")
             # Try alternate locations
             alternate_paths = [
+                '/var/render/data/runs.db',  # Correct Render.com persistent storage path
                 'runs.db',
                 '../runs.db',
                 './runs.db',
