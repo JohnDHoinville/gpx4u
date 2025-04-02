@@ -39,29 +39,72 @@ def safe_json_dumps(obj):
 
 class RunDatabase:
     def __init__(self, db_name=None):
-        # CRITICAL FIX: Use DATABASE_PATH environment variable if set
-        if db_name is None:
-            # First check environment variable
-            db_name = os.environ.get('DATABASE_PATH')
-            if db_name:
-                print(f"Using DATABASE_PATH from environment: {db_name}")
-            else:
-                # Fallback to default
-                db_name = 'runs.db'
-                print(f"No DATABASE_PATH set, using default: {db_name}")
+        # CRITICAL FIX: Much more robust database path detection
+        possible_paths = []
         
-        self.db_name = db_name
+        # Option 1: Explicitly provided DB name
+        if db_name:
+            possible_paths.append(db_name)
+            print(f"Trying explicitly provided database path: {db_name}")
         
-        # Make sure the directory exists
-        db_dir = os.path.dirname(os.path.abspath(self.db_name))
-        if db_dir and not os.path.exists(db_dir):
-            try:
-                os.makedirs(db_dir, exist_ok=True)
-                print(f"Created database directory: {db_dir}")
-            except Exception as e:
-                print(f"Error creating database directory: {e}")
+        # Option 2: Environment variable
+        env_db_path = os.environ.get('DATABASE_PATH')
+        if env_db_path:
+            possible_paths.append(env_db_path)
+            print(f"Trying DATABASE_PATH from environment: {env_db_path}")
         
-        # Only create database if it doesn't exist
+        # Option 3: Render.com persistent storage path
+        render_db_path = '/opt/render/data/runs.db'
+        possible_paths.append(render_db_path)
+        print(f"Trying Render persistent storage path: {render_db_path}")
+        
+        # Option 4: Common relative paths
+        common_paths = ['runs.db', './runs.db', '../runs.db', 'backend/runs.db']
+        for path in common_paths:
+            possible_paths.append(path)
+        
+        print("All possible database paths to try:", possible_paths)
+        
+        # Try each path
+        db_path = None
+        for path in possible_paths:
+            # Check if directory exists for this path
+            dir_path = os.path.dirname(os.path.abspath(path))
+            if dir_path and not os.path.exists(dir_path):
+                try:
+                    os.makedirs(dir_path, exist_ok=True)
+                    print(f"Created directory: {dir_path}")
+                except Exception as e:
+                    print(f"Cannot create directory {dir_path}: {str(e)}")
+                    continue
+            
+            # Check if the database exists at this path
+            if os.path.exists(path):
+                print(f"✅ Found existing database at: {path}")
+                db_path = path
+                break
+        
+        # If no existing database found, use the first valid path for a new database
+        if not db_path:
+            for path in possible_paths:
+                try:
+                    dir_path = os.path.dirname(os.path.abspath(path))
+                    if not dir_path or os.path.exists(dir_path):
+                        print(f"Using path for new database: {path}")
+                        db_path = path
+                        break
+                except Exception as e:
+                    print(f"Cannot use path {path}: {str(e)}")
+        
+        if not db_path:
+            # Last resort fallback
+            db_path = 'runs.db'
+            print(f"⚠️ FALLBACK: Using default database path: {db_path}")
+            
+        self.db_name = db_path
+        print(f"🔍 FINAL DATABASE PATH: {self.db_name}")
+        
+        # Create database if it doesn't exist
         if not os.path.exists(self.db_name):
             print(f"Creating new database: {self.db_name}")
             self.init_db()
