@@ -18,6 +18,10 @@ services:
       export DATABASE_PATH="/opt/render/data/runs.db" &&
       # CRITICAL: FORCE PRESERVE_DATABASE to true
       export PRESERVE_DATABASE="true" &&
+      # ADDED: Run pre-start backup checking script
+      if [ -f "./prestart.sh" ]; then
+        chmod +x ./prestart.sh && ./prestart.sh
+      fi &&
       # Go to backend and start the server
       cd backend && 
       if [ -f "./start_render.sh" ]; then
