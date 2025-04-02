@@ -220,16 +220,20 @@ except ModuleNotFoundError:
         # Try relative import
         from .server import app as application
     except (ImportError, ModuleNotFoundError):
-        import server
-        application = server.app
+        try:
+            import server
+            application = server.app
+        except:
+            # Last resort fallback
+            from server import app
+            application = app
 
 # For Render.com Gunicorn configuration
-# This is the object Gunicorn expects
-application = app
+app = application
 
-# Only used for direct execution
+# For local development
 if __name__ == "__main__":
-    # Render expects binding to PORT env var on 0.0.0.0
-    port = int(os.environ.get('PORT', 10000))
-    print(f"Starting Flask development server on 0.0.0.0:{port}")
+    # Get port from environment variable, default to 5001
+    port = int(os.environ.get('PORT', 5001))
+    print(f"Starting development server on port {port}")
     app.run(host='0.0.0.0', port=port)

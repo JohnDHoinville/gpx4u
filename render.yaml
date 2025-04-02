@@ -27,7 +27,7 @@ services:
         chmod +x start_render.sh && ./start_render.sh
       else
         # Fallback to direct gunicorn if script doesn't exist
-        gunicorn --workers=2 --bind=0.0.0.0:$PORT --log-level=info wsgi:app
+        gunicorn --workers=2 --bind=0.0.0.0:$PORT --log-level=info wsgi:application
       fi
     envVars:
       - key: FLASK_APP

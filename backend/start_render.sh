@@ -137,4 +137,4 @@ echo "IMPORTANT: Binding to port $port on host 0.0.0.0 as required by Render"
 
 # Start Gunicorn
 echo "Starting Gunicorn with workers=2, bind=0.0.0.0:$port"
-exec gunicorn --workers=2 --bind=0.0.0.0:$port --log-level=info wsgi:app 
+exec gunicorn --workers=2 --bind=0.0.0.0:$port --log-level=info wsgi:application 
