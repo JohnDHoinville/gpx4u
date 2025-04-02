@@ -2,81 +2,226 @@
 
 import os
 import sys
-import shutil
 import time
+import shutil
+import sqlite3
+from importlib import import_module
+from pathlib import Path
 
-# Add the current directory to the Python path
-sys.path.insert(0, os.path.dirname(__file__))
+# Add back-compatibility import
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Set production environment
 os.environ['FLASK_ENV'] = 'production'
 
-# CRITICAL: FORCE DATABASE PRESERVATION IN PRODUCTION
-os.environ['PRESERVE_DATABASE'] = 'true'
-os.environ['PREVENT_NEW_DATABASE'] = 'true'
-print(f"*** CRITICAL: Database preservation forced in WSGI entry point ***")
-print(f"PRESERVE_DATABASE=true, PREVENT_NEW_DATABASE=true")
+print("*** CRITICAL: Database preservation forced in WSGI entry point ***")
+preserve_db = os.environ.get('PRESERVE_DATABASE', 'true').lower() in ('true', 'yes', '1')
+prevent_new_db = os.environ.get('PREVENT_NEW_DATABASE', 'true').lower() in ('true', 'yes', '1')
 
-# Check for database preservation flag
-preserve_db = os.environ.get('PRESERVE_DATABASE', 'true').lower() == 'true'
-print(f"PRESERVE_DATABASE flag is set to {preserve_db} - {'existing database will be preserved' if preserve_db else 'a new database may be created if needed'}")
+print(f"PRESERVE_DATABASE={os.environ.get('PRESERVE_DATABASE')}, PREVENT_NEW_DATABASE={os.environ.get('PREVENT_NEW_DATABASE')}")
 
-# Get database path from environment
+if preserve_db:
+    print("PRESERVE_DATABASE flag is set to True - existing database will be preserved")
+
+# Function to check if a file is a valid SQLite database with the expected tables
+def is_valid_db(file_path, check_tables=True):
+    if not os.path.exists(file_path):
+        return False
+    
+    try:
+        conn = sqlite3.connect(file_path)
+        cursor = conn.cursor()
+        
+        # Check if this is a valid SQLite database
+        cursor.execute("PRAGMA integrity_check")
+        result = cursor.fetchone()
+        if result[0] != "ok":
+            return False
+        
+        if check_tables:
+            # Verify it has the expected tables
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = [row[0] for row in cursor.fetchall()]
+            
+            # Required tables for our app
+            required_tables = ['users', 'profile', 'runs']
+            
+            # Check if all required tables exist
+            if not all(table in tables for table in required_tables):
+                print(f"Missing required tables in {file_path}")
+                return False
+            
+            # Check if there are users
+            cursor.execute("SELECT COUNT(*) FROM users")
+            user_count = cursor.fetchone()[0]
+            print(f"Database at {file_path} has {user_count} users")
+            
+            # Check if there are runs
+            cursor.execute("SELECT COUNT(*) FROM runs")
+            run_count = cursor.fetchone()[0]
+            print(f"Database at {file_path} has {run_count} runs")
+            
+            # Return True only if there are users (at minimum, the admin user)
+            if user_count > 0:
+                return True
+        else:
+            return True
+        
+    except Exception as e:
+        print(f"Error validating database at {file_path}: {e}")
+        return False
+    
+    return False
+
+# Function to get database quality score (based on user and run counts)
+def get_db_quality(file_path):
+    if not os.path.exists(file_path):
+        return -1
+    
+    try:
+        conn = sqlite3.connect(file_path)
+        cursor = conn.cursor()
+        
+        # Get user count
+        cursor.execute("SELECT COUNT(*) FROM users")
+        user_count = cursor.fetchone()[0]
+        
+        # Get run count
+        cursor.execute("SELECT COUNT(*) FROM runs")
+        run_count = cursor.fetchone()[0]
+        
+        # Quality score formula: run_count * 10 + user_count
+        # This prioritizes databases with more runs
+        return (run_count * 10) + user_count
+        
+    except Exception as e:
+        print(f"Error calculating quality for {file_path}: {e}")
+        return -1
+
+# Enhanced function to find the best database from multiple locations
+def find_best_database():
+    # Define potential database locations in order of preference
+    possible_locations = [
+        os.environ.get('DATABASE_PATH'),
+        '/opt/render/data/runs.db',  # Render persistent storage
+        os.path.join(os.getcwd(), 'runs.db'),
+        os.path.join(os.getcwd(), 'backend/runs.db'),
+        os.path.join(os.path.dirname(os.getcwd()), 'runs.db'),
+        './runs.db',
+        '../runs.db',
+        '/tmp/runs.db'
+    ]
+    
+    # Filter out None values
+    possible_locations = [loc for loc in possible_locations if loc]
+    
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_locations = [loc for loc in possible_locations if not (loc in seen or seen.add(loc))]
+    
+    print(f"Searching for valid databases in {len(unique_locations)} locations")
+    
+    valid_dbs = []
+    for loc in unique_locations:
+        if is_valid_db(loc):
+            quality = get_db_quality(loc)
+            size = os.path.getsize(loc) if os.path.exists(loc) else 0
+            valid_dbs.append({
+                'path': loc,
+                'quality': quality,
+                'size': size
+            })
+            print(f"Found valid database at {loc} with quality score {quality} and size {size} bytes")
+    
+    if not valid_dbs:
+        print("No valid databases found in any location")
+        return None
+    
+    # Sort by quality score (descending)
+    valid_dbs.sort(key=lambda x: x['quality'], reverse=True)
+    best_db = valid_dbs[0]
+    
+    print(f"Selected best database at {best_db['path']} with quality score {best_db['quality']}")
+    return best_db['path']
+
+# Set database path - critical section
 db_path = os.environ.get('DATABASE_PATH')
 if db_path:
     print(f"Using DATABASE_PATH from environment: {db_path}")
     
-    # Check if the database already exists
-    if os.path.exists(db_path):
-        db_size = os.path.getsize(db_path) / 1024.0
-        print(f"FOUND EXISTING DATABASE at {db_path} (size: {db_size:.2f} KB)")
-        print("*** PRESERVING EXISTING DATABASE - NO MODIFICATIONS WILL BE MADE ***")
-        
-        # Create a backup of the existing database for safety
-        backup_dir = os.path.join(os.path.dirname(db_path), "backups")
-        if not os.path.exists(backup_dir):
-            os.makedirs(backup_dir)
-        
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        backup_path = os.path.join(backup_dir, f"runs_{timestamp}_wsgi.db")
+    # Create the database directory if it doesn't exist
+    db_dir = os.path.dirname(db_path)
+    if not os.path.exists(db_dir):
         try:
-            shutil.copy2(db_path, backup_path)
-            print(f"Created database backup at {backup_path}")
+            os.makedirs(db_dir, exist_ok=True)
+            print(f"Created database directory: {db_dir}")
         except Exception as e:
-            print(f"Warning: Could not create database backup: {e}")
-    else:
-        # Database doesn't exist at persistent location
-        # But we will NOT copy from deployment directory here
-        # This is handled in start_render.sh before this script runs
+            print(f"Warning: Could not create database directory {db_dir}: {e}")
+    
+    # If the database doesn't exist at the expected location, search for the best one
+    if not os.path.exists(db_path):
         print(f"No existing database found at {db_path}")
-        print(f"A new database will be created if needed (handled by startup script)")
+        best_db_path = find_best_database()
         
-        # Ensure the database directory exists
-        db_dir = os.path.dirname(db_path)
-        if not os.path.exists(db_dir):
+        if best_db_path and best_db_path != db_path:
+            print(f"Found better database at {best_db_path}, copying to {db_path}")
             try:
-                os.makedirs(db_dir)
-                print(f"Created database directory: {db_dir}")
+                # Create backup directory if it doesn't exist
+                backup_dir = os.path.join(db_dir, "backups")
+                if not os.path.exists(backup_dir):
+                    os.makedirs(backup_dir, exist_ok=True)
+                
+                # Get timestamp for backup name
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                
+                # Copy the best database to the proper location
+                shutil.copy2(best_db_path, db_path)
+                print(f"Successfully copied database from {best_db_path} to {db_path}")
+                
+                # Create a symlink to the database to help applications find it
+                for link_name in ['./runs.db', 'runs.db', '../runs.db']:
+                    try:
+                        if os.path.exists(link_name):
+                            os.remove(link_name)
+                        os.symlink(db_path, link_name)
+                        print(f"Created symlink {link_name} -> {db_path}")
+                    except Exception as e:
+                        print(f"Could not create symlink {link_name}: {e}")
             except Exception as e:
-                print(f"Warning: Could not create directory {db_dir}: {e}")
+                print(f"Error copying database: {e}")
+        else:
+            print(f"No better database found. A new one will be created at {db_path} if needed.")
 else:
-    # Default to a path in the data directory
-    data_dir = os.path.join(os.environ.get('HOME', '.'), 'data')
-    try:
-        if not os.path.exists(data_dir):
-            os.makedirs(data_dir)
-        db_path = os.path.join(data_dir, 'runs.db')
-        os.environ['DATABASE_PATH'] = db_path
-        print(f"Set DATABASE_PATH to default: {db_path}")
-    except Exception as e:
-        print(f"Warning: Could not set up default database path: {e}")
-        # Last resort fallback
-        db_path = 'runs.db'
-        os.environ['DATABASE_PATH'] = db_path
-        print(f"Falling back to local database: {db_path}")
+    # No database path set, set a default
+    db_path = '/opt/render/data/runs.db'
+    os.environ['DATABASE_PATH'] = db_path
+    print(f"Set DATABASE_PATH to default: {db_path}")
 
-# Import the Flask app - MUST be after environment setup
-from server import app
+# Try to import Flask-CORS for handling CORS
+try:
+    import flask_cors
+    print("Successfully imported flask_cors")
+except ImportError:
+    print("Flask-CORS not installed. Attempting to install...")
+    try:
+        import subprocess
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "flask-cors"])
+        import flask_cors
+        print("Successfully installed and imported flask_cors")
+    except Exception as e:
+        print(f"Failed to install Flask-CORS: {e}")
+        print("CORS support will not be available")
+
+# Import the application
+try:
+    from server import app as application
+except ModuleNotFoundError:
+    try:
+        # Try relative import
+        from .server import app as application
+    except (ImportError, ModuleNotFoundError):
+        import server
+        application = server.app
 
 # For Render.com Gunicorn configuration
 # This is the object Gunicorn expects
