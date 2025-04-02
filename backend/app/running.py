@@ -275,7 +275,15 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None, weig
             print(f"Last coordinate: {seg['coordinates'][-1]}")
 
         # Calculate training zones
-        training_zones = calculate_training_zones(all_heart_rates, user_age, resting_hr)
+        # Calculate the average time between heart rate samples in seconds
+        if len(point_segments) >= 2:
+            total_time_seconds = (point_segments[-1]['time'] - point_segments[0]['time']).total_seconds()
+            hr_sample_interval = total_time_seconds / len(all_heart_rates)
+            print(f"Heart rate sampling interval: {hr_sample_interval:.2f} seconds")
+        else:
+            hr_sample_interval = 1.0  # Default to 1 second if we can't calculate
+            
+        training_zones = calculate_training_zones(all_heart_rates, user_age, resting_hr, hr_sample_interval)
         print("\nTraining Zones Result:")
         print(json.dumps(training_zones, indent=2))
 
@@ -481,11 +489,12 @@ def save_run_results(file_path, pace_limit, results):
     
     return run_data
 
-def calculate_training_zones(heart_rates, user_age, resting_hr):
+def calculate_training_zones(heart_rates, user_age, resting_hr, hr_sample_interval=1.0):
     print("\nCalculating training zones:")
     print(f"Heart rates: {len(heart_rates)} values")
     print(f"User age: {user_age}")
     print(f"Resting HR: {resting_hr}")
+    print(f"HR sample interval: {hr_sample_interval:.2f} seconds")
     
     if not heart_rates or not user_age or not resting_hr:
         print("Missing required data for training zones")
@@ -516,18 +525,22 @@ def calculate_training_zones(heart_rates, user_age, resting_hr):
         
         for zone_name, zone_data in zones.items():
             if zone_data['range'][0] <= hrr_percentage <= zone_data['range'][1]:
-                zone_data['time_spent'] += 1  # Assuming 1 second per data point
+                zone_data['time_spent'] += hr_sample_interval  # Use actual time interval between samples
                 zone_data['count'] += 1
                 break
     
     # Convert seconds to minutes and calculate percentages
     total_time = sum(zone['time_spent'] for zone in zones.values())
-    print(f"Total time: {total_time} seconds")
+    print(f"Total time: {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
     
     for zone in zones.values():
         zone['time_spent'] = zone['time_spent'] / 60  # Convert to minutes
         zone['percentage'] = (zone['count'] / len(heart_rates) * 100) if heart_rates else 0
         zone.pop('count', None)  # Remove the count field
+    
+    # Add total duration for reference
+    total_minutes = total_time / 60
+    print(f"Total duration in all zones: {total_minutes:.2f} minutes")
     
     print("Calculated zones:", zones)
     return zones
