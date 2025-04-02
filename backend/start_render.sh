@@ -17,7 +17,7 @@ export FLASK_ENV="production"
 
 # Add a more aggressive database path check and repair
 echo "=== CRITICAL DATABASE PATH CHECK ==="
-export DATABASE_PATH="/opt/render/data/runs.db"
+export DATABASE_PATH="/var/render/data/runs.db"
 echo "Setting DATABASE_PATH to $DATABASE_PATH"
 
 # Create a link to help applications find the database

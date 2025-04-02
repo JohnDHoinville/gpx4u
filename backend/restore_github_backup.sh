@@ -9,7 +9,7 @@ echo "Date: $(date)"
 
 # Define paths
 GITHUB_BACKUP_PATH="/opt/render/project/src/.github/db_backup/runs.db.backup"
-TARGET_PATH="${DATABASE_PATH:-/opt/render/data/runs.db}"
+TARGET_PATH="${DATABASE_PATH:-/var/render/data/runs.db}"
 
 # Check if the backup exists
 if [ ! -f "$GITHUB_BACKUP_PATH" ]; then

@@ -13,7 +13,7 @@ echo "Running in directory: $(pwd)"
 echo "Date: $(date)"
 
 # Database Information
-TARGET_DB="${DATABASE_PATH:-/opt/render/data/runs.db}"
+TARGET_DB="${DATABASE_PATH:-/var/render/data/runs.db}"
 echo "Target database path: $TARGET_DB"
 TARGET_DIR="$(dirname "$TARGET_DB")"
 

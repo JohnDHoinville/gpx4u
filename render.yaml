@@ -18,7 +18,7 @@ services:
       chmod +x ./prestart.sh && ./prestart.sh
     startCommand: |
       # Set the database path explicitly
-      export DATABASE_PATH="/opt/render/data/runs.db" &&
+      export DATABASE_PATH="/var/render/data/runs.db" &&
       # CRITICAL: FORCE PRESERVE_DATABASE to true
       export PRESERVE_DATABASE="true" &&
       # Go to backend and start the server
@@ -41,7 +41,7 @@ services:
           name: run-analysis-db
           property: connectionString
       - key: DATABASE_PATH
-        value: /opt/render/data/runs.db
+        value: /var/render/data/runs.db
       - key: PRESERVE_DATABASE
         value: "true"
       - key: FRONTEND_URL
@@ -49,7 +49,7 @@ services:
         value: ${service.url}
     disk:
       name: run-analysis-data
-      mountPath: /opt/render/data
+      mountPath: /var/render/data
       sizeGB: 1
 
   # Alternatively, you could define separate services for backend and frontend

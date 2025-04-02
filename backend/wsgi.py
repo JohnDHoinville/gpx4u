@@ -193,7 +193,7 @@ if db_path:
             print(f"No better database found. A new one will be created at {db_path} if needed.")
 else:
     # No database path set, set a default
-    db_path = '/opt/render/data/runs.db'
+    db_path = '/var/render/data/runs.db'
     os.environ['DATABASE_PATH'] = db_path
     print(f"Set DATABASE_PATH to default: {db_path}")
 
