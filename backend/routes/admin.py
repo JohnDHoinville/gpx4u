@@ -728,3 +728,55 @@ def db_upload_page():
 </html>
     """
     return html_content 
+
+@admin_bp.route('/db_diagnostics', methods=['GET', 'POST'])
+@admin_required
+def db_diagnostics():
+    """Run the database diagnostics script and return the results"""
+    try:
+        import subprocess
+        import os
+        
+        diagnose_script = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'diagnose_db.py')
+        
+        if not os.path.exists(diagnose_script):
+            return jsonify({'error': 'Diagnostics script not found'}), 404
+        
+        # Make sure it's executable
+        subprocess.run(['chmod', '+x', diagnose_script], check=True)
+        
+        # Run the script and capture output
+        result = subprocess.run([diagnose_script], 
+                              capture_output=True, 
+                              text=True,
+                              check=False)
+        
+        # Format the output
+        output = result.stdout
+        if result.stderr:
+            output += "\n\nERRORS:\n" + result.stderr
+            
+        if request.method == 'POST':
+            # Return as JSON for API calls
+            return jsonify({
+                'success': result.returncode == 0,
+                'output': output,
+                'exit_code': result.returncode
+            })
+        else:
+            # Return as HTML for direct browser access
+            return render_template('admin_diagnostics.html', 
+                                   output=output, 
+                                   success=result.returncode == 0,
+                                   now=datetime.now())
+    except Exception as e:
+        error_msg = f"Error running diagnostics: {str(e)}"
+        traceback.print_exc()
+        
+        if request.method == 'POST':
+            return jsonify({'error': error_msg}), 500
+        else:
+            return render_template('admin_diagnostics.html', 
+                                  output=error_msg,
+                                  success=False,
+                                  now=datetime.now()) 

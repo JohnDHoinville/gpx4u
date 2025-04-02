@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPX4U - Database Diagnostics</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .diagnostic-output {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 0.25rem;
+            font-family: monospace;
+            font-size: 0.9rem;
+            max-height: 70vh;
+            overflow-y: auto;
+            padding: 1rem;
+            white-space: pre-wrap;
+        }
+        .success-output {
+            border-left: 4px solid #198754;
+        }
+        .error-output {
+            border-left: 4px solid #dc3545;
+        }
+        .toolbar {
+            margin-bottom: 1rem;
+        }
+        .timestamp {
+            color: #6c757d;
+            font-size: 0.8rem;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4 mb-5">
+        <div class="row">
+            <div class="col">
+                <h1>Database Diagnostics</h1>
+                <p class="text-muted">This tool analyzes all potential database locations and configurations to help diagnose issues.</p>
+                
+                <div class="toolbar">
+                    <a href="/admin/dashboard" class="btn btn-secondary">Back to Dashboard</a>
+                    <button id="refreshBtn" class="btn btn-primary">Run Diagnostics Again</button>
+                    <button id="copyBtn" class="btn btn-outline-secondary">Copy Output</button>
+                </div>
+                
+                <div class="timestamp">
+                    Diagnostics run at: {{ now.strftime('%Y-%m-%d %H:%M:%S') if now else '' }}
+                </div>
+                
+                {% if success %}
+                <div class="alert alert-success">
+                    <strong>Success!</strong> Diagnostics completed successfully.
+                </div>
+                {% else %}
+                <div class="alert alert-danger">
+                    <strong>Error!</strong> There was a problem running the diagnostics.
+                </div>
+                {% endif %}
+                
+                <div class="diagnostic-output {{ 'success-output' if success else 'error-output' }}">{{ output }}</div>
+                
+                <div class="mt-4">
+                    <h3>Recommended Actions</h3>
+                    <ul>
+                        <li>If diagnostics show missing required tables, use the Database Management section to restore a valid database.</li>
+                        <li>If multiple valid databases exist, consider consolidating them.</li>
+                        <li>Ensure the database path has proper read/write permissions.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Refresh button
+            document.getElementById('refreshBtn').addEventListener('click', function() {
+                window.location.reload();
+            });
+            
+            // Copy output button
+            document.getElementById('copyBtn').addEventListener('click', function() {
+                const output = document.querySelector('.diagnostic-output').textContent;
+                navigator.clipboard.writeText(output)
+                    .then(() => {
+                        const btn = this;
+                        const originalText = btn.textContent;
+                        btn.textContent = 'Copied!';
+                        btn.classList.add('btn-success');
+                        btn.classList.remove('btn-outline-secondary');
+                        
+                        setTimeout(() => {
+                            btn.textContent = originalText;
+                            btn.classList.remove('btn-success');
+                            btn.classList.add('btn-outline-secondary');
+                        }, 2000);
+                    })
+                    .catch(err => {
+                        console.error('Failed to copy: ', err);
+                        alert('Failed to copy output to clipboard');
+                    });
+            });
+        });
+    </script>
+</body>
+</html> 
