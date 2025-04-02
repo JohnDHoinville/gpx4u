@@ -322,4 +322,29 @@ def get_all_users_with_data():
             print("Created fallback admin user")
             return fallback_users
         except:
-            return [] 
+            return []
+
+# Add temporary database upload route (DELETE THIS AFTER RESTORING DATABASE)
+@admin_bp.route('/temp_upload_db', methods=['POST'])
+def temp_upload_db():
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file part'}), 400
+        
+        file = request.files['file']
+        if not file or file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+            
+        # Save to the backend directory
+        file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploaded_runs.db')
+        file.save(file_path)
+        
+        file_size = os.path.getsize(file_path)
+        
+        return jsonify({
+            'message': 'Database file uploaded successfully',
+            'path': file_path,
+            'size': file_size
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500 
