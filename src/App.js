@@ -2413,10 +2413,26 @@ function App() {
         method: 'POST',
         credentials: 'include'
       });
+      // Clear user authentication state
       setUserId(null);
       setUsername('');
       setIsAuthenticated(false);
       setUser(null);
+      
+      // Clear all analysis-related state
+      setResults(null);
+      setAnalysisVisible(false);
+      setSelectedFile(null);
+      setFileName('');
+      setRunDate('');
+      setSaveStatus('');
+      setRunHistory([]);
+      setCompareMode(false);
+      setComparedRuns([]);
+      
+      // Reset any form data
+      setPaceLimit(9.0);
+      setShowUploadForm(false);
     } catch (error) {
       console.error('Logout error:', error);
     }

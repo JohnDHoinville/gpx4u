@@ -316,9 +316,8 @@ def delete_user(user_id):
 # Logout from admin
 @admin_bp.route('/logout', methods=['GET', 'POST'])
 def admin_logout():
-    # Clear session
-    session.pop('user_id', None)
-    session.pop('is_admin', None)
+    # Clear all session data
+    session.clear()
     
     # Redirect to login page
     return redirect(url_for('admin_bp.admin_login'))
