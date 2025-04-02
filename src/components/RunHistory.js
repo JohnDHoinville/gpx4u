@@ -1,3 +1,4 @@
+//**Persist data:** Persistant runs.db is set to /var/render/data
 import React, { useState, useEffect } from 'react';
 import { API_URL } from '../config';
 import './RunHistory.css';
