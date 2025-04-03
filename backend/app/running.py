@@ -131,9 +131,15 @@ def needs_downsampling(gpx_file, threshold_points_per_minute=20, sample_minutes=
         print(f"Error checking if file needs downsampling: {str(e)}")
         return False
 
-def downsample_gpx_smart(input_gpx_file, output_gpx_file, min_time_gap=3):
+def downsample_gpx_smart(input_gpx_file, output_gpx_file, min_time_gap=3, pace_limit=None):
     """
-    Smart downsampling that preserves heart rate trends and significant changes.
+    Smart downsampling that preserves heart rate trends and pace transition points.
+    
+    Args:
+        input_gpx_file: Original GPX file path
+        output_gpx_file: Path to save downsampled GPX
+        min_time_gap: Minimum seconds between points (default 3)
+        pace_limit: Target pace threshold to preserve transition points around
     """
     try:
         tree = ET.parse(input_gpx_file)
@@ -158,12 +164,15 @@ def downsample_gpx_smart(input_gpx_file, output_gpx_file, min_time_gap=3):
         
         print(f"Original file has {len(track_points)} trackpoints")
         
-        # Extract heart rate and time data for all points
+        # Extract data for all points with pace calculation
         point_data = []
-        previous_hr = None
-        previous_time = None
+        previous_point = None
         
         for i, point in enumerate(track_points):
+            # Extract lat/lon
+            lat = float(point.get('lat'))
+            lon = float(point.get('lon'))
+            
             # Extract time
             time_elem = point.find('./gpx:time', namespaces)
             if time_elem is None:
@@ -182,26 +191,60 @@ def downsample_gpx_smart(input_gpx_file, output_gpx_file, min_time_gap=3):
                     
             current_hr = int(hr_elem.text) if hr_elem is not None else None
             
-            # Calculate time difference if not first point
+            # Calculate time difference, distance, and pace if not first point
             time_diff = 0
-            if previous_time:
-                time_diff = (current_time - previous_time).total_seconds()
+            distance = 0
+            pace = 0
+            is_pace_transition = False
+            current_pace_status = None
+            
+            if previous_point:
+                time_diff = (current_time - previous_point['time']).total_seconds()
                 
+                # Calculate distance using Haversine
+                if time_diff > 0:
+                    distance = haversine(
+                        previous_point['lat'], previous_point['lon'], 
+                        lat, lon
+                    )
+                    
+                    # Calculate pace (min/mile)
+                    if distance > 0:
+                        pace = (time_diff / 60) / distance
+                        
+                        # Check if this point represents a pace transition
+                        if pace_limit:
+                            current_pace_status = pace <= pace_limit
+                            
+                            if previous_point.get('pace_status') is not None:
+                                previous_pace_status = previous_point['pace_status']
+                                
+                                # Detect crossing the pace threshold
+                                if current_pace_status != previous_pace_status:
+                                    is_pace_transition = True
+            
             # Calculate heart rate change if possible
             hr_change = 0
-            if previous_hr and current_hr:
-                hr_change = abs(current_hr - previous_hr)
+            if previous_point and previous_point['hr'] and current_hr:
+                hr_change = abs(current_hr - previous_point['hr'])
                 
-            point_data.append({
+            # Create point data entry
+            point_item = {
                 'index': i,
+                'lat': lat,
+                'lon': lon,
                 'time': current_time,
                 'time_diff': time_diff,
                 'hr': current_hr,
-                'hr_change': hr_change
-            })
+                'hr_change': hr_change,
+                'distance': distance, 
+                'pace': pace,
+                'is_pace_transition': is_pace_transition,
+                'pace_status': current_pace_status
+            }
             
-            previous_time = current_time
-            previous_hr = current_hr
+            point_data.append(point_item)
+            previous_point = point_item
         
         # Always keep first and last points
         points_to_keep = [0]
@@ -223,7 +266,6 @@ def downsample_gpx_smart(input_gpx_file, output_gpx_file, min_time_gap=3):
                 break
         
         # Second pass: add points with significant heart rate changes
-        # (points where HR changes by more than 5 bpm from previous kept point)
         significant_hr_change = 5
         current_kept_point = 0
         
@@ -238,6 +280,28 @@ def downsample_gpx_smart(input_gpx_file, output_gpx_file, min_time_gap=3):
                 abs(point_data[i]['hr'] - point_data[current_kept_point]['hr']) > significant_hr_change):
                 points_to_keep.append(point_data[i]['index'])
                 current_kept_point = i
+        
+        # Third pass: add points that mark pace transitions
+        if pace_limit:
+            print(f"Looking for pace transitions around {pace_limit} min/mile")
+            transition_points_added = 0
+            
+            for i in range(1, len(point_data) - 1):
+                if point_data[i]['is_pace_transition']:
+                    # Keep transition point and one point before and after
+                    if i > 0 and point_data[i-1]['index'] not in points_to_keep:
+                        points_to_keep.append(point_data[i-1]['index'])
+                        transition_points_added += 1
+                    
+                    if point_data[i]['index'] not in points_to_keep:
+                        points_to_keep.append(point_data[i]['index'])
+                        transition_points_added += 1
+                    
+                    if i < len(point_data)-1 and point_data[i+1]['index'] not in points_to_keep:
+                        points_to_keep.append(point_data[i+1]['index'])
+                        transition_points_added += 1
+            
+            print(f"Added {transition_points_added} points to preserve pace transitions")
         
         # Sort indices to keep original order
         points_to_keep = sorted(set(points_to_keep))
@@ -324,7 +388,14 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None, weig
         if needs_downsampling(file_path, threshold_points_per_minute=20, sample_minutes=2):
             print("High-frequency file detected, downsampling...")
             downsampled_path = f"{file_path}_downsampled.gpx"
-            success = downsample_gpx_smart(file_path, downsampled_path, min_time_gap=3)
+            
+            # Pass the pace_limit to the downsampling function
+            success = downsample_gpx_smart(
+                file_path, 
+                downsampled_path, 
+                min_time_gap=3,
+                pace_limit=pace_limit
+            )
             
             if success:
                 print(f"Using downsampled file: {downsampled_path}")
