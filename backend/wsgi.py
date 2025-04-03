@@ -225,7 +225,10 @@ except ModuleNotFoundError:
             application = server.app
         except:
             # Last resort fallback
-from server import app
+            import sys
+            import os
+            sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+            from server import app
             application = app
 
 # For Render.com Gunicorn configuration
