@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timedelta
 from math import radians, sin, cos, sqrt, atan2, isnan
 import traceback
 import os
@@ -62,6 +62,255 @@ def parse_time(time_str):
     local_tz = get_localzone()
     return utc_time.astimezone(local_tz)
 
+# Add new downsampling functions
+def needs_downsampling(gpx_file, threshold_points_per_minute=20, sample_minutes=2):
+    """
+    Determines if a GPX file needs downsampling by analyzing point frequency
+    in the first few minutes of activity.
+    
+    Returns: (bool) True if downsampling is recommended
+    """
+    try:
+        tree = ET.parse(gpx_file)
+        root = tree.getroot()
+        
+        namespaces = {
+            'gpx': 'http://www.topografix.com/GPX/1/1'
+        }
+        
+        # Get all trackpoints
+        track_points = root.findall('.//gpx:trkpt', namespaces)
+        
+        # Not enough points to worry about
+        if len(track_points) < 50:
+            return False
+            
+        # Get the timestamps from points
+        times = []
+        for point in track_points:
+            time_elem = point.find('./gpx:time', namespaces)
+            if time_elem is not None:
+                try:
+                    timestamp = datetime.strptime(time_elem.text, "%Y-%m-%dT%H:%M:%SZ")
+                    times.append(timestamp)
+                except (ValueError, TypeError):
+                    continue
+        
+        # Not enough timestamped points
+        if len(times) < 2:
+            return False
+            
+        # Sort times (they should already be sorted, but just to be safe)
+        times.sort()
+        
+        # Calculate the activity start time
+        start_time = times[0]
+        
+        # Calculate the cutoff time (start_time + sample_minutes)
+        cutoff_time = start_time + timedelta(minutes=sample_minutes)
+        
+        # Count points in the sample window
+        points_in_window = sum(1 for t in times if t <= cutoff_time)
+        
+        # Calculate actual sample duration (in case activity is shorter than sample_minutes)
+        actual_minutes = min(
+            sample_minutes,
+            (times[-1] - times[0]).total_seconds() / 60
+        )
+        
+        # Calculate points per minute
+        if actual_minutes > 0:
+            points_per_minute = points_in_window / actual_minutes
+            print(f"GPX file has {points_per_minute:.1f} points per minute")
+            
+            # Return True if points per minute exceeds threshold
+            return points_per_minute > threshold_points_per_minute
+        
+        return False
+    except Exception as e:
+        print(f"Error checking if file needs downsampling: {str(e)}")
+        return False
+
+def downsample_gpx_smart(input_gpx_file, output_gpx_file, min_time_gap=3):
+    """
+    Smart downsampling that preserves heart rate trends and significant changes.
+    """
+    try:
+        tree = ET.parse(input_gpx_file)
+        root = tree.getroot()
+        
+        namespaces = {
+            'gpx': 'http://www.topografix.com/GPX/1/1',
+            'gpxtpx': 'http://www.garmin.com/xmlschemas/TrackPointExtension/v1',
+            'gpxx': 'http://www.garmin.com/xmlschemas/GpxExtensions/v3'
+        }
+        
+        # Find all trackpoints
+        track_points = []
+        for trk in root.findall('.//gpx:trk', namespaces):
+            for trkseg in trk.findall('.//gpx:trkseg', namespaces):
+                for trkpt in trkseg.findall('.//gpx:trkpt', namespaces):
+                    track_points.append(trkpt)
+        
+        if len(track_points) < 100:  # Only downsample files with lots of points
+            print(f"Not enough trackpoints ({len(track_points)}) to downsample")
+            return False
+        
+        print(f"Original file has {len(track_points)} trackpoints")
+        
+        # Extract heart rate and time data for all points
+        point_data = []
+        previous_hr = None
+        previous_time = None
+        
+        for i, point in enumerate(track_points):
+            # Extract time
+            time_elem = point.find('./gpx:time', namespaces)
+            if time_elem is None:
+                continue
+            current_time = datetime.strptime(time_elem.text, "%Y-%m-%dT%H:%M:%SZ")
+            
+            # Extract heart rate
+            hr_elem = None
+            for path in ['.//gpxtpx:TrackPointExtension/gpxtpx:hr', './/gpx:extensions//hr', './/extensions//hr', './/hr']:
+                try:
+                    hr_elem = point.find(path, namespaces)
+                    if hr_elem is not None:
+                        break
+                except:
+                    continue
+                    
+            current_hr = int(hr_elem.text) if hr_elem is not None else None
+            
+            # Calculate time difference if not first point
+            time_diff = 0
+            if previous_time:
+                time_diff = (current_time - previous_time).total_seconds()
+                
+            # Calculate heart rate change if possible
+            hr_change = 0
+            if previous_hr and current_hr:
+                hr_change = abs(current_hr - previous_hr)
+                
+            point_data.append({
+                'index': i,
+                'time': current_time,
+                'time_diff': time_diff,
+                'hr': current_hr,
+                'hr_change': hr_change
+            })
+            
+            previous_time = current_time
+            previous_hr = current_hr
+        
+        # Always keep first and last points
+        points_to_keep = [0]
+        if len(track_points) > 1:
+            points_to_keep.append(len(track_points) - 1)
+        
+        # First pass: keep points based on time interval
+        current_index = 0
+        while current_index < len(point_data) - 1:  # Skip last point as we always keep it
+            next_index = current_index + 1
+            while next_index < len(point_data) - 1:
+                if point_data[next_index]['time_diff'] >= min_time_gap:
+                    points_to_keep.append(point_data[next_index]['index'])
+                    current_index = next_index
+                    break
+                next_index += 1
+            
+            if next_index >= len(point_data) - 1:
+                break
+        
+        # Second pass: add points with significant heart rate changes
+        # (points where HR changes by more than 5 bpm from previous kept point)
+        significant_hr_change = 5
+        current_kept_point = 0
+        
+        for i in range(1, len(point_data) - 1):  # Skip first and last points
+            if point_data[i]['index'] in points_to_keep:
+                current_kept_point = i
+                continue
+                
+            # Check if significant HR change from last kept point
+            if (point_data[i]['hr'] is not None and 
+                point_data[current_kept_point]['hr'] is not None and
+                abs(point_data[i]['hr'] - point_data[current_kept_point]['hr']) > significant_hr_change):
+                points_to_keep.append(point_data[i]['index'])
+                current_kept_point = i
+        
+        # Sort indices to keep original order
+        points_to_keep = sorted(set(points_to_keep))
+        
+        # Create a new GPX tree with only the kept points
+        new_root = ET.Element(root.tag, root.attrib)
+        
+        # Copy all direct children except track
+        for child in root:
+            if child.tag.endswith('trk'):
+                continue
+            new_root.append(ET.Element(child.tag, child.attrib))
+            for subchild in child:
+                new_child = ET.SubElement(new_root.find(child.tag), subchild.tag, subchild.attrib)
+                new_child.text = subchild.text
+        
+        # Create new track element
+        for trk in root.findall('.//gpx:trk', namespaces):
+            new_trk = ET.SubElement(new_root, trk.tag, trk.attrib)
+            
+            # Copy track name and other track metadata
+            for child in trk:
+                if child.tag.endswith('trkseg'):
+                    continue
+                new_trk_child = ET.SubElement(new_trk, child.tag, child.attrib)
+                new_trk_child.text = child.text
+            
+            # Create new track segment
+            for trkseg in trk.findall('.//gpx:trkseg', namespaces):
+                new_trkseg = ET.SubElement(new_trk, trkseg.tag, trkseg.attrib)
+                
+                # Only add the track points we want to keep
+                track_points_in_segment = trkseg.findall('.//gpx:trkpt', namespaces)
+                segment_indices = range(len(track_points_in_segment))
+                
+                for i, trkpt in zip(segment_indices, track_points_in_segment):
+                    if i in points_to_keep:
+                        # Deep copy the track point with all its children
+                        new_trkpt = ET.SubElement(new_trkseg, trkpt.tag, trkpt.attrib)
+                        
+                        # Copy all children of the track point
+                        for child in trkpt:
+                            new_child = ET.SubElement(new_trkpt, child.tag, child.attrib)
+                            new_child.text = child.text
+                            
+                            # If this is an extensions element, copy all its children
+                            if child.tag.endswith('extensions'):
+                                for ext_child in child:
+                                    new_ext_child = ET.SubElement(new_child, ext_child.tag, ext_child.attrib)
+                                    new_ext_child.text = ext_child.text
+                                    
+                                    # Handle TrackPointExtension specifically
+                                    if ext_child.tag.endswith('TrackPointExtension'):
+                                        for tpx_child in ext_child:
+                                            new_tpx_child = ET.SubElement(new_ext_child, tpx_child.tag, tpx_child.attrib)
+                                            new_tpx_child.text = tpx_child.text
+        
+        # Write the new tree to file
+        tree = ET.ElementTree(new_root)
+        tree.write(output_gpx_file)
+        
+        # Count points in the new file
+        new_tree = ET.parse(output_gpx_file)
+        new_root = new_tree.getroot()
+        new_points = new_root.findall('.//gpx:trkpt', namespaces)
+        print(f"Downsampled file has {len(new_points)} trackpoints (reduced by {(1 - len(new_points)/len(track_points))*100:.1f}%)")
+        
+        return True
+    except Exception as e:
+        print(f"Error downsampling GPX file: {str(e)}")
+        traceback.print_exc()
+        return False
+
 # Function to parse GPX data and calculate distance under specified pace
 def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None, weight=None, gender=None):
     try:
@@ -70,6 +319,18 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None, weig
         print(f"Pace limit: {pace_limit} min/mile")
         print(f"User metrics - Age: {user_age}, Resting HR: {resting_hr}")
         print(f"Additional metrics - Weight: {weight} (entered in lbs), Gender: {gender}")
+        
+        # Check if file needs downsampling
+        if needs_downsampling(file_path, threshold_points_per_minute=20, sample_minutes=2):
+            print("High-frequency file detected, downsampling...")
+            downsampled_path = f"{file_path}_downsampled.gpx"
+            success = downsample_gpx_smart(file_path, downsampled_path, min_time_gap=3)
+            
+            if success:
+                print(f"Using downsampled file: {downsampled_path}")
+                file_path = downsampled_path
+            else:
+                print("Downsampling failed, using original file")
         
         # Convert from lbs to kg
         weight_in_kg = weight * 0.453592
@@ -87,6 +348,10 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None, weig
             'gpx': 'http://www.topografix.com/GPX/1/1',
             'ns3': 'http://www.garmin.com/xmlschemas/TrackPointExtension/v1'
         }
+        
+        # Add creator information from GPX metadata
+        creator = root.get('creator')
+        print(f"GPX creator: {creator}")
         
         # Initialize variables
         total_distance_all = 0
@@ -352,7 +617,8 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None, weig
             'training_load': training_load,
             'recovery_time': recovery_time,
             'race_predictions': race_predictions,
-            'max_hr': max_hr
+            'max_hr': max_hr,
+            'creator': creator
         }
         
     except Exception as e:

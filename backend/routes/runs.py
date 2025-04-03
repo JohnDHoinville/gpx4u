@@ -291,7 +291,13 @@ def analyze():
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
-                print(f"Cleaned up temp file: {temp_path}")
+                print(f"Cleaned up temporary file: {temp_path}")
+                
+            # Also clean up downsampled file if it exists
+            downsampled_path = f"{temp_path}_downsampled.gpx"
+            if os.path.exists(downsampled_path):
+                os.remove(downsampled_path)
+                print(f"Cleaned up downsampled file: {downsampled_path}")
     except Exception as e:
         print(f"\nServer error in /analyze route:")
         traceback.print_exc()
