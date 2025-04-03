@@ -11,6 +11,13 @@ class SafeJSONEncoder(JSONEncoder):
     def default(self, obj):
         if isinstance(obj, datetime):
             return obj.strftime('%Y-%m-%d %H:%M:%S')
+        if isinstance(obj, float):
+            if obj == float('inf') or obj == float('Infinity'):
+                return "Infinity"
+            if obj == float('-inf') or obj == float('-Infinity'):
+                return "-Infinity"
+            if obj != obj:  # NaN check
+                return "NaN"
         return super().default(obj)
         
     def encode(self, obj):

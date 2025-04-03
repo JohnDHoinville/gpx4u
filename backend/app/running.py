@@ -712,7 +712,8 @@ def finalize_segment(segment):
     # Calculate pace
     pace = time_diff / segment['distance'] if segment['distance'] > 0 else float('inf')
     
-    return {
+    # Create the segment with properly handling Infinity values
+    result = {
         'is_fast': segment['is_fast'],
         'start_time': segment['start_time'],
         'end_time': points[-1]['time'],
@@ -725,6 +726,11 @@ def finalize_segment(segment):
         'start_point': segment['coordinates'][0],
         'end_point': segment['coordinates'][-1]
     }
+    
+    # Add best_pace field (needed for compatibility with existing code)
+    result['best_pace'] = pace
+    
+    return result
 
 def list_gpx_files(directory="~/Downloads"):
     # Expand the ~ to full home directory path
