@@ -271,15 +271,18 @@ def analyze():
             print(f"Run saved successfully with ID: {run_id}")
 
             # Use custom encoder for the response too
+            response_data = {
+                'message': 'Analysis complete',
+                'data': analysis_result,
+                'run_id': run_id,
+                'saved': True,
+                'date': run_date,
+                'run_date': run_date
+            }
+            
+            # Use safe_json_dumps to ensure proper handling of Infinity values
             return current_app.response_class(
-                response=json.dumps({
-                    'message': 'Analysis complete',
-                    'data': analysis_result,
-                    'run_id': run_id,
-                    'saved': True,
-                    'date': run_date,
-                    'run_date': run_date
-                }, cls=CustomJSONEncoder),
+                response=safe_json_dumps(response_data),
                 status=200,
                 mimetype='application/json'
             )
@@ -428,8 +431,12 @@ def get_run_analysis(run_id):
             print(f"Training Load: {response_data.get('training_load')}")
             print(f"Recovery Time: {response_data.get('recovery_time')}")
                 
-            # Return the full analysis data with updates
-            return safe_json_dumps(response_data), 200
+            # Return the full analysis data with updates using safe_json_dumps
+            return current_app.response_class(
+                response=safe_json_dumps(response_data),
+                status=200,
+                mimetype='application/json'
+            )
             
         except json.JSONDecodeError:
             return jsonify({'error': 'Invalid run data format'}), 500
