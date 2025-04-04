@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { API_URL } from '../config';
 import './RunHistory.css';
+import { safelyParseJSON } from '../utils';
 
 const RunHistory = () => {
     // IMPORTANT: Initialize runs as an empty array, never null or undefined
@@ -15,142 +16,28 @@ const RunHistory = () => {
     useEffect(() => {
         let isMounted = true;
         
-        // Safely pre-process and parse JSON that might contain Infinity values
-        const safelyParseJSON = (jsonText) => {
-            try {
-                if (!jsonText || typeof jsonText !== 'string') {
-                    console.error('Invalid JSON input:', jsonText);
-                    return [];
-                }
-                
-                // First approach: Regular expression to replace all instances of Infinity/NaN as unquoted literals
-                let processed = jsonText
-                    .replace(/"pace"\s*:\s*Infinity/g, '"pace":"Infinity"')
-                    .replace(/"pace"\s*:\s*-Infinity/g, '"pace":"-Infinity"')
-                    .replace(/"pace"\s*:\s*NaN/g, '"pace":"NaN"')
-                    .replace(/:\s*Infinity/g, ':"Infinity"')
-                    .replace(/:\s*-Infinity/g, ':"-Infinity"')
-                    .replace(/:\s*NaN/g, ':"NaN"');
-                    
-                try {
-                    // Try parsing the pre-processed JSON
-                    return JSON.parse(processed);
-                } catch (e) {
-                    console.error('First approach failed:', e);
-                    
-                    // Second approach: More aggressive replacements
-                    processed = jsonText
-                        .replace(/Infinity/g, '"Infinity"')
-                        .replace(/-Infinity/g, '"-Infinity"')
-                        .replace(/NaN/g, '"NaN"')
-                        // Fix double quotes that might have been introduced
-                        .replace(/""/g, '"');
-                        
-                    try {
-                        return JSON.parse(processed);
-                    } catch (e2) {
-                        console.error('Second approach failed:', e2);
-                        
-                        // Last resort: Try a completely different approach
-                        // Convert everything that looks like a JSON object to a JS object
-                        try {
-                            // Using Function constructor as a last resort (safe in this context)
-                            const jsObj = new Function('return ' + jsonText.replace(/Infinity/g, '"Infinity"').replace(/-Infinity/g, '"-Infinity"').replace(/NaN/g, '"NaN"'))();
-                            return jsObj;
-                        } catch (e3) {
-                            console.error('All approaches failed. Returning empty array.');
-                            console.log('Problematic JSON:', jsonText.substring(0, 500) + '...');
-                            return [];
-                        }
-                    }
-                }
-            } catch (e) {
-                console.error('Fatal JSON parsing error:', e);
-                return [];
-            }
-        };
-
         const fetchRuns = async () => {
-            console.log('Fetching runs...'); 
-            
-            // Always start with a known good state
-            if (isMounted) {
-                setLoading(true);
-                setError(null);
-            }
-            
+            setLoading(true);
             try {
                 const response = await fetch(`${API_URL}/runs`, {
-                    method: 'GET',
-                    credentials: 'include',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    }
+                    credentials: 'include'
                 });
-
+                
                 if (!response.ok) {
-                    throw new Error(`Failed to fetch runs: ${response.status}`);
-                }
-
-                // Safely parse JSON with error handling
-                let data;
-                try {
-                    const text = await response.text();
-                    console.log('Raw response:', text.substring(0, 100) + "...");
-                    
-                    // Ensure we're parsing valid JSON
-                    if (!text || text.trim() === '') {
-                        console.warn('Empty response from server');
-                        data = [];
-                    } else {
-                        data = safelyParseJSON(text);
-                    }
-                } catch (jsonError) {
-                    console.error('Error parsing JSON:', jsonError);
-                    throw new Error('Invalid response format from server');
-                }
-
-                console.log('Received data:', data?.length);
-                console.log('Data type:', typeof data);
-                console.log('Is array:', Array.isArray(data));
-                
-                // Super defensive data handling
-                let processedRuns = [];
-                
-                // Check various possible formats and convert to array
-                if (Array.isArray(data)) {
-                    processedRuns = data;
-                } else if (data && typeof data === 'object') {
-                    if (data.runs && Array.isArray(data.runs)) {
-                        processedRuns = data.runs;
-                    } else {
-                        // Try to convert object to array as last resort
-                        try {
-                            processedRuns = Object.values(data);
-                        } catch (e) {
-                            console.error('Failed to convert object to array:', e);
-                            processedRuns = [];
-                        }
-                    }
+                    throw new Error(`Server returned ${response.status}`);
                 }
                 
-                console.log('Processed runs count:', processedRuns.length);
-                console.log('Is processed array:', Array.isArray(processedRuns));
+                const responseText = await response.text();
+                const data = safelyParseJSON(responseText) || [];
                 
-                // Set state only if component is still mounted
                 if (isMounted) {
-                    // CRITICAL: Ensure we're setting an array
-                    setRuns(Array.isArray(processedRuns) ? processedRuns : []);
+                    setRuns(data);
                     setError(null);
                 }
             } catch (err) {
-                console.error('Error fetching runs:', err);
-                // Set state only if component is still mounted
+                console.error("Error fetching runs:", err);
                 if (isMounted) {
-                    setError(err.message);
-                    // CRITICAL: Set runs to empty array on error, never null or undefined
-                    setRuns([]);
+                    setError("Failed to load runs. Please try again later.");
                 }
             } finally {
                 if (isMounted) {
@@ -158,10 +45,9 @@ const RunHistory = () => {
                 }
             }
         };
-
+        
         fetchRuns();
         
-        // Cleanup function to prevent state updates on unmounted component
         return () => {
             isMounted = false;
         };

@@ -748,18 +748,27 @@ const calculateAveragePace = (segments) => {
   return segments.reduce((sum, segment) => sum + segment.pace, 0) / segments.length;
 };
 
-// Helper function to extract pace values from results
+  const secs = Math.round((pace - mins) * 60);
+  return <span>{mins}:{secs < 10 ? '0' + secs : secs}</span>;
+};
+
+// Modify the extractPaceValue function to add more debugging and better handling for slow pace
 const extractPaceValue = (results, paceType) => {
   if (!results) return null;
   
-  // Check for calculated time and distance values first
+  // For debugging
   if (paceType === 'slow') {
-    const slowTime = calculateSlowSegmentsTime(results);
-    const slowDistance = results.slow_distance;
+    console.log("Slow pace extraction:", {
+      avg_pace_slow: results.avg_pace_slow,
+      slow_pace: results.slow_pace,
+      slow_segments: results.slow_segments,
+      slow_distance: results.slow_distance,
+      slow_time: results.slow_time
+    });
     
-    if (slowTime > 0 && slowDistance > 0) {
-      const calculatedPace = slowTime / slowDistance;
-      
+    // If we have slow_time and slow_distance, calculate pace directly
+    if (isFinite(results.slow_time) && isFinite(results.slow_distance) && results.slow_distance > 0) {
+      const calculatedPace = results.slow_time / results.slow_distance;
       console.log("Calculated slow pace from time/distance:", calculatedPace);
       if (isFinite(calculatedPace) && calculatedPace > 0) {
         return calculatedPace;
@@ -1315,11 +1324,45 @@ function App() {
       console.log('Response status:', response.status);
       
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorText = await response.text();
+        
+        // Try to parse error with a reviver function that handles Infinity
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText, (key, value) => {
+            if (value === "Infinity") return Infinity;
+            if (value === "-Infinity") return -Infinity;
+            if (value === "NaN") return NaN;
+            return value;
+          });
+        } catch (parseError) {
+          errorData = { error: 'Unknown error' };
+        }
+        
         throw new Error(errorData.error || 'Failed to analyze the run');
       }
       
-      const data = await response.json();
+      // Get response as text first
+      const responseText = await response.text();
+      
+      // Try to parse directly with a reviver function that handles Infinity
+      let data;
+      try {
+        data = JSON.parse(responseText, (key, value) => {
+          if (value === "Infinity") return Infinity;
+          if (value === "-Infinity") return -Infinity;
+          if (value === "NaN") return NaN;
+          return value;
+        });
+      } catch (parseError) {
+        console.error("Direct JSON parsing failed, trying safelyParseJSON:", parseError);
+        // Fall back to our custom parser if direct parsing fails
+        data = safelyParseJSON(responseText);
+        if (!data) {
+          throw new Error('Failed to parse response from server');
+        }
+      }
+      
       console.log('Analysis results received:', data);
       
       // Store the results
@@ -1335,1105 +1378,6 @@ function App() {
       setError(`Failed to analyze the run: ${error.message}`);
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Update the chart data preparation function
-  const prepareChartData = (results) => {
-    if (!results || !results.fast_segments || !results.slow_segments) {
-      return {
-        labels: [],
-        datasets: []
-      };
-    }
-
-    const allSegments = [
-      ...results.fast_segments.map(s => ({...s, type: 'fast'})),
-      ...results.slow_segments.map(s => ({...s, type: 'slow'}))
-    ].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
-
-    const datasets = [
-      {
-        label: 'Pace (min/mile)',
-        data: allSegments.map(segment => segment.pace),
-        backgroundColor: allSegments.map(segment => 
-          segment.type === 'fast' ? 'rgba(75, 192, 192, 0.6)' : 'rgba(192, 75, 75, 0.6)'
-        ),
-        borderColor: allSegments.map(segment => 
-          segment.type === 'fast' ? 'rgba(75, 192, 192, 1)' : 'rgba(192, 75, 75, 1)'
-        ),
-        borderWidth: 1,
-        yAxisID: 'y',
-        type: 'bar'
-      },
-      {
-        label: 'Heart Rate (bpm)',
-        data: allSegments.map(segment => segment.avg_hr),
-        borderColor: 'rgba(255, 99, 132, 1)',
-        borderWidth: 2,
-        yAxisID: 'y1',
-        type: 'line',
-        pointRadius: 4,
-        fill: false,
-        tension: 0.1
-      }
-    ];
-
-    // Only add elevation data if it exists
-    if (results.elevation_data && results.elevation_data.length > 0) {
-      datasets.push({
-        label: 'Elevation (ft)',
-        data: results.elevation_data.map(point => point.elevation),
-        borderColor: 'rgba(153, 102, 255, 1)',
-        borderWidth: 2,
-        yAxisID: 'y2',
-        type: 'line',
-        pointRadius: 0,
-        fill: true,
-        backgroundColor: 'rgba(153, 102, 255, 0.1)',
-        tension: 0.4
-      });
-    }
-
-    return {
-      labels: allSegments.map(segment => 
-        new Date(segment.start_time).toLocaleTimeString([], { 
-          hour: '2-digit', 
-          minute: '2-digit' 
-        })
-      ),
-      datasets
-    };
-  };
-
-  // Update chart options
-  const chartOptions = {
-    responsive: true,
-    scales: {
-      x: {
-        title: {
-          display: true,
-          text: 'Segment Time Range'
-        }
-      },
-      y: {
-        beginAtZero: false,
-        position: 'left',
-        title: {
-          display: true,
-          text: 'Pace (min/mile)'
-        },
-        afterDataLimits: (scale) => {
-          const range = scale.max - scale.min;
-          scale.max += range * 0.25;
-          scale.min -= range * 0.25;
-        }
-      },
-      y1: {
-        beginAtZero: false,
-        position: 'right',
-        grid: {
-          drawOnChartArea: false,
-        },
-        title: {
-          display: true,
-          text: 'Heart Rate (bpm)'
-        },
-        afterDataLimits: (scale) => {
-          const range = scale.max - scale.min;
-          scale.max += range * 0.25;
-          scale.min -= range * 0.25;
-        }
-      },
-      y2: {
-        beginAtZero: false,
-        position: 'right',
-        grid: {
-          drawOnChartArea: false,
-        },
-        title: {
-          display: true,
-          text: 'Elevation (ft)'
-        }
-      }
-    },
-    plugins: {
-      legend: {
-        position: 'top',
-      },
-      title: {
-        display: true,
-        text: 'Segment Analysis'
-      },
-      tooltip: {
-        callbacks: {
-          label: function(context) {
-            const label = context.dataset.label || '';
-            const value = context.parsed.y;
-            const allSegments = [
-              ...results.fast_segments.map(s => ({...s, type: 'fast'})),
-              ...results.slow_segments.map(s => ({...s, type: 'slow'}))
-            ].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
-            const segment = allSegments[context.dataIndex];
-
-            if (!segment) return `${label}: ${formatPace(value)}`;
-
-            return [
-              `${label}: ${formatPace(value)}`,
-              `Distance: ${segment.distance.toFixed(2)} mi`,
-              `Type: ${segment.type === 'fast' ? 'Fast' : 'Slow'} Segment`
-            ];
-          }
-        }
-      }
-    }
-  };
-
-  // Update Mile Splits component
-  const MileSplits = ({ splits }) => {
-    if (!splits || splits.length === 0) return null;
-
-    return (
-      <div className="mile-splits">
-        <h4>Mile Splits</h4>
-        <div className="table-container">
-          <table className="splits-table">
-            <thead>
-              <tr>
-                <th>Mile</th>
-                <th>Split Time</th>
-                <th>Pace</th>
-                <th>Heart Rate</th>
-              </tr>
-            </thead>
-            <tbody>
-              {splits.map((split, index) => (
-                <tr key={index}>
-                  <td>{split.mile}</td>
-                  <td>{formatTime(split.split_time)}</td>
-                  <td>{formatTime(split.split_pace)} /mi</td>
-                  <td>{Math.round(split.avg_hr)} bpm</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  };
-
-  // Add this new component
-  const RouteMap = ({ routeData, fastSegments, slowSegments }) => {
-    // Set a default center (we'll update it when we have data)
-    const [center, setCenter] = useState([42.5, -83.2]); // Default to Michigan area
-    
-    useEffect(() => {
-      // Calculate center from first valid segment
-      if (routeData && routeData.length > 0) {
-        const firstSegment = routeData[0];
-        if (firstSegment.coordinates && firstSegment.coordinates.length > 0) {
-          // Use the first coordinate of the first segment
-          setCenter(firstSegment.coordinates[0]);
-          console.log('Setting map center to:', firstSegment.coordinates[0]);
-        }
-      }
-    }, [routeData]);
-
-    // Process segments for display
-    const processedSegments = useMemo(() => {
-      if (!routeData || !routeData.length) return { line_types: [], sample_positions: [], total_lines: 0 };
-
-      return {
-        line_types: routeData.map(segment => ({
-          type: segment.type,
-          coordinates: segment.coordinates
-        })),
-        sample_positions: routeData.map(segment => segment.coordinates),
-        total_lines: routeData.length
-      };
-    }, [routeData]);
-
-    return (
-      <div className="route-map">
-        <MapContainer 
-          center={center} 
-          zoom={15} 
-          style={{ height: '400px', width: '100%' }}
-          key={`${center[0]}-${center[1]}`} // Force re-render when center changes
-        >
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          />
-          {processedSegments.line_types.map((segment, index) => (
-            <Polyline
-              key={index}
-              positions={segment.coordinates}
-              pathOptions={{
-                color: segment.type === 'fast' ? '#4CAF50' : '#FF5252',
-                weight: 3
-              }}
-            >
-              <MapTooltip>
-                {`${segment.type.charAt(0).toUpperCase() + segment.type.slice(1)} Segment`}
-              </MapTooltip>
-            </Polyline>
-          ))}
-        </MapContainer>
-      </div>
-    );
-  };
-
-  const PaceAnalysis = ({ results, paceZones, elevationImpact }) => {
-    if (!results || !paceZones) return null;
-
-    return (
-      <div className="pace-analysis">
-        <h3>Pace Analysis</h3>
-        
-        {/* Pace Zones */}
-        <div className="pace-zones">
-          <h4>Recommended Training Paces</h4>
-          {Object.entries(paceZones).map(([zone, data]) => (
-            <div key={zone} className="pace-zone-item">
-              <h5>{zone}</h5>
-              <p className="pace-range">
-                {data.range[0].toFixed(1)} - {data.range[1].toFixed(1)} min/mile
-              </p>
-              <p className="pace-description">{data.description}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Elevation vs Pace Chart */}
-        <div className="elevation-pace-chart">
-          <h4>Elevation Impact on Pace</h4>
-          <Line
-            data={{
-              labels: elevationImpact.map((_, i) => i + 1),
-              datasets: [
-                {
-                  label: 'Pace',
-                  data: elevationImpact.map(d => d.pace),
-                  borderColor: 'rgb(75, 192, 192)',
-                  yAxisID: 'y'
-                },
-                {
-                  label: 'Elevation Change',
-                  data: elevationImpact.map(d => d.elevation_change),
-                  borderColor: 'rgb(153, 102, 255)',
-                  yAxisID: 'y1'
-                }
-              ]
-            }}
-            options={{
-              responsive: true,
-              scales: {
-                y: {
-                  title: { display: true, text: 'Pace (min/mile)' }
-                },
-                y1: {
-                  position: 'right',
-                  title: { display: true, text: 'Elevation Change (ft)' }
-                }
-              }
-            }}
-          />
-        </div>
-      </div>
-    );
-  };
-
-  const RunHistory = ({ runs, onCompareRuns, onRunDeleted, setResults }) => {
-    const [selectedRuns, setSelectedRuns] = useState([]);
-    const [expandedRows, setExpandedRows] = useState({});
-    const [fastSegmentsData, setFastSegmentsData] = useState({});
-    const [loadingStates, setLoadingStates] = useState({});
-
-    // Function to toggle selection for comparison
-    const toggleSelection = (runId) => {
-      if (selectedRuns.includes(runId)) {
-        setSelectedRuns(selectedRuns.filter(id => id !== runId));
-      } else {
-        setSelectedRuns([...selectedRuns, runId]);
-      }
-    };
-
-    const getPaceLimit = (run) => {
-      // Check different possible locations for pace_limit
-      // 1. Direct property on the run object
-      if (run.pace_limit !== undefined && run.pace_limit !== null) {
-        return run.pace_limit;
-      } 
-      
-      // 2. Nested in the data object (most common pattern)
-      if (run.data) {
-        // 2a. If data is an object
-        if (typeof run.data === 'object' && run.data !== null) {
-          if (run.data.pace_limit !== undefined && run.data.pace_limit !== null) {
-            return run.data.pace_limit;
-          }
-        } 
-        // 2b. If data is a string, try to parse it
-        else if (typeof run.data === 'string') {
-          try {
-            const parsedData = JSON.parse(run.data);
-            if (parsedData && parsedData.pace_limit !== undefined && parsedData.pace_limit !== null) {
-              return parsedData.pace_limit;
-            }
-          } catch (e) {
-            console.error("Error parsing run data for pace limit:", e);
-          }
-        }
-      }
-      
-      // 3. Finally, check if we have a fast_segments array with a target pace
-      try {
-        const data = typeof run.data === 'string' ? JSON.parse(run.data) : run.data;
-        if (data && data.fast_segments && data.fast_segments.length > 0) {
-          // The pace limit is usually the threshold between fast and slow segments
-          const fastSegment = data.fast_segments[0];
-          if (fastSegment.target_pace) {
-            return fastSegment.target_pace;
-          }
-        }
-      } catch (e) {
-        // Ignore parsing errors
-      }
-      
-      // Default to 0 if nothing found (will show as N/A)
-      return 0;
-    };
-
-    // Enhanced date formatting with better error handling and fallbacks
-    const formatDate = (timestamp) => {
-      // Check if timestamp is a valid value
-      if (!timestamp) return 'N/A';
-      
-      console.log('Formatting date value:', timestamp, typeof timestamp);
-      
-      try {
-        // Try parsing as Date object
-        let dateObj;
-        
-        // Handle different date formats
-        if (typeof timestamp === 'string') {
-          // Handle iso format dates
-          if (timestamp.includes('T')) {
-            dateObj = new Date(timestamp);
-          } 
-          // Handle YYYY-MM-DD format
-          else if (timestamp.match(/^\d{4}-\d{2}-\d{2}$/)) {
-            const [year, month, day] = timestamp.split('-');
-            dateObj = new Date(year, parseInt(month) - 1, day);
-          }
-          // Handle YYYY-MM-DD HH:MM:SS format (SQLite format)
-          else if (timestamp.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)) {
-            dateObj = new Date(timestamp.replace(' ', 'T'));
-          }
-          // Try direct parsing
-          else {
-            dateObj = new Date(timestamp);
-          }
-        } else {
-          dateObj = new Date(timestamp);
-        }
-        
-        // Check if we have a valid date
-        if (isNaN(dateObj.getTime())) {
-          console.warn(`Invalid date format: ${timestamp}`);
-          
-          // Check if this is a Unix timestamp (seconds)
-          if (typeof timestamp === 'number' || !isNaN(parseInt(timestamp))) {
-            const timestampNum = parseInt(timestamp);
-            // If timestamp is in seconds (Unix format), convert to milliseconds
-            if (timestampNum < 10000000000) { // Less than year 2286 in seconds
-              dateObj = new Date(timestampNum * 1000);
-            } else {
-              dateObj = new Date(timestampNum);
-            }
-          }
-          
-          // If still invalid, return fallback
-          if (isNaN(dateObj.getTime())) {
-            return 'N/A';
-          }
-        }
-        
-        // Format the date nicely
-        return dateObj.toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric'
-        });
-      } catch (e) {
-        console.error('Error formatting date:', e);
-        return 'N/A';
-      }
-    };
-
-    const safeNumber = (value, decimals = 2) => {
-      if (value === undefined || value === null || isNaN(value)) {
-        return '0';
-      }
-      return Number(value).toFixed(decimals);
-    };
-
-    const getRunDistance = (run) => {
-      if (run.data && run.data.total_distance) {
-        return run.data.total_distance;
-      } else if (typeof run.data === 'string') {
-        try {
-          const parsedData = JSON.parse(run.data);
-          return parsedData.total_distance;
-        } catch (e) {
-          return 0;
-        }
-      }
-      return 0;
-    };
-
-    // Toggle expanded row
-    const toggleExpandRow = (runId) => {
-      setExpandedRows({...expandedRows, [runId]: !expandedRows[runId]});
-      if (!expandedRows[runId] && !fastSegmentsData[runId]) {
-        loadFastSegments(runId);
-      }
-    };
-
-    const handleRowClick = (runId) => {
-      toggleExpandRow(runId);
-    };
-
-    // Load fast segments for a run
-    const loadFastSegments = (runId) => {
-      // Set loading state for this run
-      setLoadingStates(prev => ({...prev, [runId]: true}));
-      
-      // Get the run data
-      const run = runs.find(r => r.id === runId);
-      if (!run) return;
-      
-      let segments = [];
-      
-      // Extract fast segments
-      if (run.data && run.data.fast_segments) {
-        segments = run.data.fast_segments;
-      } else if (typeof run.data === 'string') {
-        try {
-          const parsedData = JSON.parse(run.data);
-          segments = parsedData.fast_segments || [];
-        } catch (e) {
-          console.error("Error parsing run data:", e);
-          segments = [];
-        }
-      }
-      
-      // Update fast segments data
-      setFastSegmentsData(prev => ({...prev, [runId]: segments}));
-      // Clear loading state
-      setLoadingStates(prev => ({...prev, [runId]: false}));
-    };
-
-    // Update the viewAnalysis function to set the analysisVisible state
-    const viewAnalysis = async (runId) => {
-      try {
-        // Set loading state
-        setLoadingStates(prev => ({...prev, [`analysis_${runId}`]: true}));
-        
-        console.log(`Fetching analysis data for run: ${runId}`);
-        
-        // Fetch analysis data from the backend
-        const response = await fetch(`${API_URL}/run/${runId}/analysis`, {
-          credentials: 'include'
-        });
-        
-        // Log full response details for debugging
-        console.log(`Analysis response status: ${response.status}`);
-        
-        if (!response.ok) {
-          const errorData = await response.json().catch(e => ({ error: 'Unknown error' }));
-          console.error(`Error response from server:`, errorData);
-          throw new Error(errorData.error || `Server returned ${response.status}`);
-        }
-        
-        const analysisData = await response.json();
-        console.log(`Successfully retrieved analysis data for run ${runId}`, analysisData);
-        
-        // Ensure advanced metrics are copied to the top level from data if needed
-        if (analysisData.data) {
-          // Copy advanced metrics to top level if they exist in nested data
-          if (analysisData.data.vo2max !== undefined && (analysisData.vo2max === undefined || analysisData.vo2max === null)) {
-            console.log("Copying vo2max from nested data to top level");
-            analysisData.vo2max = analysisData.data.vo2max;
-          }
-          
-          if (analysisData.data.training_load !== undefined && (analysisData.training_load === undefined || analysisData.training_load === null)) {
-            console.log("Copying training_load from nested data to top level");
-            analysisData.training_load = analysisData.data.training_load;
-          }
-          
-          if (analysisData.data.recovery_time !== undefined && (analysisData.recovery_time === undefined || analysisData.recovery_time === null)) {
-            console.log("Copying recovery_time from nested data to top level");
-            analysisData.recovery_time = analysisData.data.recovery_time;
-          }
-        }
-
-        console.log("Final analysis data with metrics:", {
-          vo2max: analysisData.vo2max,
-          training_load: analysisData.training_load,
-          recovery_time: analysisData.recovery_time
-        });
-        
-        // Update the results state in the parent component to display the analysis
-        setResults(analysisData);
-        
-        // Make sure the analysis section is visible
-        setAnalysisVisible(true);
-        
-        // Scroll to analysis section
-        const resultsElement = document.querySelector('.results');
-        if (resultsElement) {
-          resultsElement.scrollIntoView({ behavior: 'smooth' });
-        } else {
-          console.warn('Results section not found in DOM');
-        }
-        
-      } catch (error) {
-        console.error('Error loading analysis data:', error);
-        alert('Failed to load analysis data. Please try again.');
-      } finally {
-        // Clear loading state
-        setLoadingStates(prev => ({...prev, [`analysis_${runId}`]: false}));
-      }
-    };
-
-    return (
-      <div className="run-history">
-        <h2>Run History</h2>
-        {runs.length > 0 && console.log('Run data sample:', runs[0])}
-        <div className="history-controls">
-          <button 
-            className="compare-button" 
-            disabled={selectedRuns.length < 2}
-            onClick={() => onCompareRuns(selectedRuns)}
-          >
-            Compare Selected Runs
-          </button>
-        </div>
-        <div className="table-container">
-          <table className="history-table">
-            <thead>
-              <tr>
-                <th>Compare</th>
-                <th>Date</th>
-                <th>Distance</th>
-                <th>Target Pace</th>
-                <th>Overall Pace</th>
-                <th>Heart Rate</th>
-                <th>Fast Segments</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {runs.map(run => (
-                <React.Fragment key={run.id}>
-                  <tr 
-                    className={expandedRows[run.id] ? 'selected-run' : ''}
-                    onClick={() => handleRowClick(run.id)}
-                  >
-                    <td onClick={(e) => { e.stopPropagation(); toggleSelection(run.id); }}>
-                      <input 
-                        type="checkbox" 
-                        checked={selectedRuns.includes(run.id)} 
-                        onChange={() => {}} // Controlled component
-                      />
-                    </td>
-                    <td>{formatDate(run.date)}</td>
-                    <td>{safeNumber(getRunDistance(run))} mi</td>
-                    <td>
-                      {(() => {
-                        console.log(`Run ${run.id} pace limit debug:`, {
-                          directPaceLimit: run.pace_limit,
-                          directPaceLimitType: typeof run.pace_limit,
-                          dataPaceLimit: run.data?.pace_limit,
-                          runKeys: Object.keys(run),
-                          hasDataField: run.data !== undefined,
-                          dataType: typeof run.data
-                        });
-                        
-                        // Try multiple possible locations for pace limit
-                        let paceLimit = run.pace_limit;
-                        
-                        // Check run.pace_limit directly first (priority)
-                        if (paceLimit === undefined || paceLimit === null || paceLimit === 0) {
-                          // Try data.pace_limit next
-                          if (run.data) {
-                            if (typeof run.data === 'object' && run.data !== null) {
-                              paceLimit = run.data.pace_limit; 
-                            } else if (typeof run.data === 'string') {
-                              try {
-                                const parsedData = JSON.parse(run.data);
-                                paceLimit = parsedData.pace_limit;
-                              } catch (e) {
-                                console.error("Error parsing run data for pace limit:", e);
-                              }
-                            }
-                          }
-                        }
-                        
-                        console.log(`Final pace limit for run ${run.id}:`, paceLimit);
-                        
-                        // Return N/A for zero or invalid pace limits
-                        if (paceLimit === undefined || paceLimit === null || paceLimit === 0) {
-                          return 'N/A';
-                        }
-                        
-                        // Otherwise format the pace
-                        return formatPace(paceLimit);
-                      })()}
-                    </td>
-                    <td>
-                      {(() => {
-                        // Extract overall pace with defensive coding
-                        let overallPace = null;
-                        
-                        // Try direct property
-                        if (isFinite(run.avg_pace)) {
-                          overallPace = run.avg_pace;
-                        }
-                        // Try data object
-                        else if (run.data) {
-                          if (typeof run.data === 'object' && run.data !== null) {
-                            if (isFinite(run.data.avg_pace_all)) {
-                              overallPace = run.data.avg_pace_all;
-                            } else if (isFinite(run.data.avg_pace)) {
-                              overallPace = run.data.avg_pace;
-                            }
-                          } else if (typeof run.data === 'string') {
-                            try {
-                              const parsedData = JSON.parse(run.data);
-                              if (isFinite(parsedData.avg_pace_all)) {
-                                overallPace = parsedData.avg_pace_all;
-                              } else if (isFinite(parsedData.avg_pace)) {
-                                overallPace = parsedData.avg_pace;
-                              }
-                            } catch (e) {
-                              console.error("Error parsing run data for overall pace:", e);
-                            }
-                          }
-                        }
-                        
-                        // Calculate from segments if needed and possible
-                        if (overallPace === null) {
-                          try {
-                            const data = typeof run.data === 'string' ? JSON.parse(run.data) : run.data;
-                            if (data && data.fast_segments && data.slow_segments) {
-                              // Use the calculateTotalPace function logic
-                              const fastSegments = data.fast_segments || [];
-                              const slowSegments = data.slow_segments || [];
-                              
-                              let totalDistance = 0;
-                              let totalTime = 0;
-                              
-                              // Add up fast segments
-                              for (const segment of fastSegments) {
-                                if (isFinite(segment.distance) && isFinite(segment.pace)) {
-                                  totalDistance += segment.distance;
-                                  totalTime += segment.distance * segment.pace;
-                                }
-                              }
-                              
-                              // Add up slow segments
-                              for (const segment of slowSegments) {
-                                if (isFinite(segment.distance) && isFinite(segment.pace)) {
-                                  totalDistance += segment.distance;
-                                  totalTime += segment.distance * segment.pace;
-                                }
-                              }
-                              
-                              if (totalDistance > 0) {
-                                overallPace = totalTime / totalDistance;
-                              }
-                            }
-                          } catch (e) {
-                            console.error("Error calculating overall pace from segments:", e);
-                          }
-                        }
-                        
-                        // Format and return
-                        if (overallPace !== null && isFinite(overallPace) && overallPace > 0) {
-                          return formatPace(overallPace);
-                        }
-                        return 'N/A';
-                      })()}
-                    </td>
-                    <td>
-                      {(() => {
-                        // Extract heart rate with defensive coding
-                        let heartRate = null;
-                        
-                        // Try direct property
-                        if (run.avg_hr !== undefined && run.avg_hr !== null) {
-                          heartRate = run.avg_hr;
-                        }
-                        // Try data object
-                        else if (run.data) {
-                          if (typeof run.data === 'object' && run.data !== null) {
-                            heartRate = run.data.avg_hr_all || run.data.avg_hr;
-                          } else if (typeof run.data === 'string') {
-                            try {
-                              const parsedData = JSON.parse(run.data);
-                              heartRate = parsedData.avg_hr_all || parsedData.avg_hr;
-                            } catch (e) {
-                              console.error("Error parsing run data for heart rate:", e);
-                            }
-                          }
-                        }
-                        
-                        // Format and return
-                        if (heartRate !== null && heartRate !== undefined && heartRate > 0) {
-                          return `${Math.round(heartRate)} bpm`;
-                        }
-                        return 'N/A';
-                      })()}
-                    </td>
-                    <td>
-                      <div className="fast-summary">
-                        <span className="fast-distance">
-                          {(() => {
-                            // Try multiple paths to get fast distance
-                            let fastDistance = 0;
-                            
-                            // Direct access
-                            if (run.fast_distance !== undefined) {
-                              fastDistance = run.fast_distance;
-                            } 
-                            // From data object 
-                            else if (run.data?.fast_distance !== undefined) {
-                              fastDistance = run.data.fast_distance;
-                            }
-                            // Parse JSON string if needed
-                            else if (typeof run.data === 'string') {
-                              try {
-                                const parsedData = JSON.parse(run.data);
-                                fastDistance = parsedData?.fast_distance || 0;
-                              } catch (e) {
-                                console.error("Error parsing run data for fast distance:", e);
-                              }
-                            }
-                            
-                            return `${safeNumber(fastDistance)} mi`;
-                          })()}
-                        </span>
-                        <span className="fast-pace">
-                          {(() => {
-                            // Attempt to extract and format the pace
-                            try {
-                              // Parse data if it's a string
-                              const data = typeof run.data === 'string' ? JSON.parse(run.data) : run.data;
-                              
-                              // Try different possible locations for the pace value
-                              let pace = 0;
-                              
-                              // Check multiple possible properties
-                              if (data?.avg_pace_fast) {
-                                pace = data.avg_pace_fast;
-                              } else if (data?.fast_segments && data.fast_segments.length > 0) {
-                                // Get average pace across all fast segments
-                                const validPaces = data.fast_segments
-                                  .filter(seg => seg.pace && seg.pace !== Infinity && !isNaN(seg.pace))
-                                  .map(seg => seg.pace);
-                                  
-                                if (validPaces.length > 0) {
-                                  pace = validPaces.reduce((sum, p) => sum + p, 0) / validPaces.length;
-                                }
-                              }
-                              
-                              // Fall back to individual segment if available
-                              if (!pace && data?.fast_segments?.[0]?.pace) {
-                                pace = data.fast_segments[0].pace;
-                              }
-                              
-                              // Sanity check for unreasonably large values (over 30 min/mile is probably wrong)
-                              if (!pace || pace > 30 || pace === Infinity || isNaN(pace)) {
-                                return '';
-                              }
-                              
-                              // Format and return the pace
-                              return `${formatPace(pace)} min/mi`;
-                            } catch (e) {
-                              console.error("Error extracting pace:", e);
-                              return '';
-                            }
-                          })()}
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="action-buttons">
-                        <button 
-                          className="view-analysis-button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            viewAnalysis(run.id);
-                          }}
-                          disabled={loadingStates[`analysis_${run.id}`]}
-                        >
-                          {loadingStates[`analysis_${run.id}`] ? '...' : '📊'}
-                        </button>
-                        <button 
-                          className="delete-button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onRunDeleted(run.id);
-                          }}
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  {expandedRows[run.id] && (
-                    <tr className="fast-segments-row">
-                      <td colSpan="8">
-                        <div className="fast-segments-container">
-                          <h4>Fast Segments</h4>
-                          {loadingStates[run.id] ? (
-                            <div>Loading segments...</div>
-                          ) : fastSegmentsData[run.id] && fastSegmentsData[run.id].length > 0 ? (
-                            <div className="segments-list">
-                              {fastSegmentsData[run.id].map((segment, index) => (
-                                <div key={index} className="segment-item">
-                                  <span className="segment-number">{index + 1}</span>
-                                  <span className="segment-distance">{safeNumber(segment.distance)} mi</span>
-                                  <span className="segment-pace">{formatPace(segment.pace)} min/mi</span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div>No fast segments found</div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  };
-
-  const RunComparison = ({ runs, onClose }) => {
-    if (!runs || runs.length !== 2) {
-      return <div>Please select two runs to compare</div>;
-    }
-
-    const [run1, run2] = runs;
-
-    // Add debug logging
-    console.log('Raw run data:', {
-      run1: {
-        date: run1.date,
-        total_distance: run1.total_distance,
-        avg_pace: run1.avg_pace,
-        avg_hr: run1.avg_hr,
-        data: run1.data
-      },
-      run2: {
-        date: run2.date,
-        total_distance: run2.total_distance,
-        avg_pace: run2.avg_pace,
-        avg_hr: run2.avg_hr,
-        data: run2.data
-      }
-    });
-
-    // Safely parse the data with error handling
-    let run1Data, run2Data;
-    try {
-      run1Data = typeof run1.data === 'string' ? JSON.parse(run1.data) : run1.data;
-      run2Data = typeof run2.data === 'string' ? JSON.parse(run2.data) : run2.data;
-
-      // Add debug logging for parsed data
-      console.log('Parsed run data:', {
-        run1Data: {
-          total_distance: run1Data.total_distance,
-          fast_distance: run1Data.fast_distance,
-          slow_distance: run1Data.slow_distance
-        },
-        run2Data: {
-          total_distance: run2Data.total_distance,
-          fast_distance: run2Data.fast_distance,
-          slow_distance: run2Data.slow_distance
-        }
-      });
-    } catch (error) {
-      console.error('Error parsing run data:', error);
-      return <div>Error loading run data</div>;
-    }
-
-    // Add safety checks for required data
-    if (!run1Data || !run2Data) {
-      return <div>Missing run data</div>;
-    }
-
-    const safeNumber = (value, decimals = 2) => {
-      return typeof value === 'number' && !isNaN(value) ? value.toFixed(decimals) : 'N/A';
-    };
-
-    // Try to get total distance from either the run object or the parsed data
-    const getTotalDistance = (run, runData) => {
-      if (typeof run.total_distance === 'number') return run.total_distance;
-      if (typeof runData.total_distance === 'number') return runData.total_distance;
-      return null;
-    };
-
-    const run1Distance = getTotalDistance(run1, run1Data);
-    const run2Distance = getTotalDistance(run2, run2Data);
-
-    console.log('Calculated distances:', { run1Distance, run2Distance });
-
-    return (
-      <div className="run-comparison">
-        <div className="comparison-header">
-          <h2>Run Comparison</h2>
-          <div className="comparison-controls">
-            <button onClick={onClose} className="back-button">
-              Back to Runs
-            </button>
-            <button onClick={onClose} className="close-button">×</button>
-          </div>
-        </div>
-
-        <div className="comparison-grid">
-          <div className="comparison-column">
-            <h3>Run 1: {new Date(run1.date).toLocaleDateString()}</h3>
-            <div className="comparison-stats">
-              <div className="stat-item">
-                <label>Total Distance:</label>
-                <span>{safeNumber(run1Distance)} mi</span>
-              </div>
-              <div className="stat-item">
-                <label>Average Pace:</label>
-                <span>{formatPace(run1.avg_pace)} min/mi</span>
-              </div>
-              <div className="stat-item">
-                <label>Average HR:</label>
-                <span>{safeNumber(run1.avg_hr, 0)} bpm</span>
-              </div>
-              <div className="stat-item">
-                <label>Fast Distance:</label>
-                <span>
-                  {safeNumber(run1Data.fast_distance)} mi 
-                  ({safeNumber(run1Data.percentage_fast, 1)}%)
-                </span>
-              </div>
-              <div className="stat-item">
-                <label>Slow Distance:</label>
-                <span>
-                  {safeNumber(run1Data.slow_distance)} mi 
-                  ({safeNumber(run1Data.percentage_slow, 1)}%)
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="comparison-column">
-            <h3>Run 2: {new Date(run2.date).toLocaleDateString()}</h3>
-            <div className="comparison-stats">
-              <div className="stat-item">
-                <label>Total Distance:</label>
-                <span>{safeNumber(run2Distance)} mi</span>
-              </div>
-              <div className="stat-item">
-                <label>Average Pace:</label>
-                <span>{formatPace(run2.avg_pace)} min/mi</span>
-              </div>
-              <div className="stat-item">
-                <label>Average HR:</label>
-                <span>{safeNumber(run2.avg_hr, 0)} bpm</span>
-              </div>
-              <div className="stat-item">
-                <label>Fast Distance:</label>
-                <span>
-                  {safeNumber(run2Data.fast_distance)} mi 
-                  ({safeNumber(run2Data.percentage_fast, 1)}%)
-                </span>
-              </div>
-              <div className="stat-item">
-                <label>Slow Distance:</label>
-                <span>
-                  {safeNumber(run2Data.slow_distance)} mi 
-                  ({safeNumber(run2Data.percentage_slow, 1)}%)
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="comparison-charts">
-          <div className="chart-container">
-            <h4>Pace Comparison</h4>
-            <Bar 
-              data={preparePaceComparisonData(run1, run1Data, run2, run2Data)} 
-              options={comparisonChartOptions} 
-            />
-          </div>
-          <div className="chart-container">
-            <h4>Heart Rate Comparison</h4>
-            <Bar 
-              data={prepareHRComparisonData(run1Data, run2Data)} 
-              options={comparisonChartOptions} 
-            />
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Update the handleCompareRuns function
-  const handleCompareRuns = async (selectedRunIds) => {
-    try {
-      console.log('Comparing runs:', selectedRunIds);
-      const runsToCompare = runHistory.filter(run => selectedRunIds.includes(run.id));
-      
-      if (runsToCompare.length !== 2) {
-        setError('Please select exactly 2 runs to compare');
-        return;
-      }
-
-      setComparedRuns(runsToCompare);
-      setCompareMode(true);
-    } catch (error) {
-      console.error('Error comparing runs:', error);
-      setError('Failed to compare runs');
-    }
-  };
-
-  const handleRunDeleted = async (runId) => {
-    try {
-      console.log(`Attempting to delete run ${runId}`);
-      const response = await fetch(`${API_URL}/runs/${runId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-
-      if (response.status === 401) {
-        setUserId(null);
-        setError('Please log in to delete runs');
-        return;
-      }
-
-      // Refresh the run history after successful deletion
-      console.log(`Successfully deleted run ${runId}`);
-      fetchRunHistory();
-    } catch (error) {
-      console.error('Error deleting run:', error);
-      setError(error.message || 'Failed to delete run');
     }
   };
 
@@ -2524,6 +1468,113 @@ function App() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showUploadForm]);
+
+  // Update the viewAnalysis function to set the analysisVisible state
+  const viewAnalysis = async (runId) => {
+    try {
+      // Set loading state
+      setLoadingStates(prev => ({...prev, [`analysis_${runId}`]: true}));
+      
+      console.log(`Fetching analysis data for run: ${runId}`);
+      
+      // Fetch analysis data from the backend
+      const response = await fetch(`${API_URL}/run/${runId}/analysis`, {
+        credentials: 'include'
+      });
+      
+      // Log full response details for debugging
+      console.log(`Analysis response status: ${response.status}`);
+      
+      if (!response.ok) {
+        // Try to parse error with a reviver function that handles Infinity
+        const errorText = await response.text();
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText, (key, value) => {
+            if (value === "Infinity") return Infinity;
+            if (value === "-Infinity") return -Infinity;
+            if (value === "NaN") return NaN;
+            return value;
+          });
+        } catch (parseError) {
+          console.error("Error parsing error response:", parseError);
+          errorData = { error: 'Unknown error' };
+        }
+        
+        console.error(`Error response from server:`, errorData);
+        throw new Error(errorData.error || `Server returned ${response.status}`);
+      }
+      
+      // Get response as text first
+      const responseText = await response.text();
+      
+      // Try to parse directly with a reviver function that handles Infinity
+      let analysisData;
+      try {
+        analysisData = JSON.parse(responseText, (key, value) => {
+          if (value === "Infinity") return Infinity;
+          if (value === "-Infinity") return -Infinity;
+          if (value === "NaN") return NaN;
+          return value;
+        });
+      } catch (parseError) {
+        console.error("Direct JSON parsing failed, trying safelyParseJSON:", parseError);
+        // Fall back to our custom parser if direct parsing fails
+        analysisData = safelyParseJSON(responseText);
+        if (!analysisData) {
+          throw new Error('Failed to parse response from server');
+        }
+      }
+      
+      console.log(`Successfully retrieved analysis data for run ${runId}`, analysisData);
+      
+      // Ensure advanced metrics are copied to the top level from data if needed
+      if (analysisData.data) {
+        // Copy advanced metrics to top level if they exist in nested data
+        if (analysisData.data.vo2max !== undefined && (analysisData.vo2max === undefined || analysisData.vo2max === null)) {
+          console.log("Copying vo2max from nested data to top level");
+          analysisData.vo2max = analysisData.data.vo2max;
+        }
+        
+        if (analysisData.data.training_load !== undefined && (analysisData.training_load === undefined || analysisData.training_load === null)) {
+          console.log("Copying training_load from nested data to top level");
+          analysisData.training_load = analysisData.data.training_load;
+        }
+        
+        if (analysisData.data.recovery_time !== undefined && (analysisData.recovery_time === undefined || analysisData.recovery_time === null)) {
+          console.log("Copying recovery_time from nested data to top level");
+          analysisData.recovery_time = analysisData.data.recovery_time;
+        }
+      }
+
+      console.log("Final analysis data with metrics:", {
+        vo2max: analysisData.vo2max,
+        training_load: analysisData.training_load,
+        recovery_time: analysisData.recovery_time
+      });
+      
+      // Update the results state in the parent component to display the analysis
+      setResults(analysisData);
+      
+      // Make sure the analysis section is visible
+      setAnalysisVisible(true);
+      
+      // Scroll to analysis section
+      const resultsElement = document.querySelector('.results');
+      if (resultsElement) {
+        resultsElement.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        console.warn('Results section not found in DOM');
+      }
+      
+    } catch (error) {
+      console.error('Error loading analysis data:', error);
+      alert('Failed to load analysis data. Please try again.');
+    } finally {
+      // Clear loading state
+      setLoadingStates(prev => ({...prev, [`analysis_${runId}`]: false}));
+    }
+  };
 
   return (
     <ThemeProvider>
