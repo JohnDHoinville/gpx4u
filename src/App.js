@@ -35,6 +35,7 @@ import HeartRatePaceCorrelation from './components/HeartRatePaceCorrelation';
 import FatigueAnalysis from './components/FatigueAnalysis';
 import PaceConsistency from './components/PaceConsistency';
 import CustomSegments from './components/CustomSegments';
+import RunMap from './components/RunMap';
 
 // Register ChartJS components
 ChartJS.register(
@@ -2543,6 +2544,16 @@ function App() {
     // Otherwise use standard formatting
     return value.toFixed(decimals);
   };
+  
+  // Format pace values as minutes:seconds
+  const formatPace = (paceMinutes) => {
+    if (!paceMinutes || isNaN(paceMinutes)) return "0:00";
+    
+    const minutes = Math.floor(paceMinutes);
+    const seconds = Math.round((paceMinutes - minutes) * 60);
+    
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
 
   // Add this in your App.js component (after setting results)
   useEffect(() => {
@@ -2585,6 +2596,49 @@ function App() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showUploadForm]);
+
+  const renderRunStats = () => {
+    if (!results) return null;
+    return (
+      <div className="stats-container">
+        <h3>Run Statistics</h3>
+        <div className="stat-grid">
+          <div className="stat-item">
+            <span className="stat-label">Total Distance</span>
+            <span className="stat-value">{formatNumber(results.total_distance)} mi</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-label">Overall Pace</span>
+            <span className="stat-value">{formatPace(results.overall_avg_pace)}</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-label">Fast Distance (under {formatNumber(results.pace_limit)} min/mi)</span>
+            <span className="stat-value">{formatNumber(results.fast_distance)} mi ({formatNumber(results.percentage_fast)}%)</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-label">Avg Fast Pace</span>
+            <span className="stat-value">{formatPace(results.avg_pace_fast)}</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-label">Slow Distance (over {formatNumber(results.pace_limit)} min/mi)</span>
+            <span className="stat-value">{formatNumber(results.slow_distance)} mi ({formatNumber(results.percentage_slow)}%)</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-label">Avg Slow Pace</span>
+            <span className="stat-value">{formatPace(results.avg_pace_slow)}</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-label">Avg Heart Rate</span>
+            <span className="stat-value">{formatNumber(results.avg_hr_all)} bpm</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-label">Max Heart Rate</span>
+            <span className="stat-value">{formatNumber(results.max_hr)} bpm</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <ThemeProvider>
@@ -3063,6 +3117,11 @@ function App() {
                     onClose={() => setCompareMode(false)}
                   />
                 )}
+
+                <div className="summary-metrics">
+                  <h3>Run Analysis</h3>
+                  {renderRunStats()}
+                </div>
               </main>
             </>
           )}

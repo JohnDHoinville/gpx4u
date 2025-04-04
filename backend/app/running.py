@@ -276,7 +276,7 @@ def downsample_gpx_smart(input_gpx_file, output_gpx_file, min_time_gap=3, pace_l
         significant_hr_change = 5
         current_kept_point = 0
         
-        for i in range(1, len(point_data) - 1):  # Skip first and last points
+        for i in range(1, len(point_data) - 1):
             if point_data[i]['index'] in points_to_keep:
                 current_kept_point = i
                 continue
@@ -546,7 +546,7 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None, weig
                                 'hr': hr,
                                 'distance': distance,
                                 'pace': pace,
-                                'is_fast': pace <= pace_limit if pace != float('inf') else False,
+                                'is_fast': pace <= float(pace_limit) if pace != float('inf') else False,
                                 'prev_point': prev_point
                             }
                             point_segments.append(point_segment)
@@ -628,23 +628,85 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None, weig
                 print(f"Continuing with original segments")
                 traceback.print_exc()
         
+        # Filter out unreasonable paces (likely GPS errors)
+        # World record mile pace is around 3:43, so we'll use 3:00 as a lower bound
+        # And 20:00 as an upper bound for reasonable running/walking
+        print("Validating pace data...")
+        original_fast_count = len(fast_segments)
+        original_slow_count = len(slow_segments)
+        
+        # Keep only segments with reasonable paces
+        reasonable_segments = []
+        for segment in fast_segments + slow_segments:
+            if 3.0 <= segment['pace'] <= 20.0:
+                reasonable_segments.append(segment)
+            else:
+                print(f"Filtering out segment with unrealistic pace: {segment['pace']:.2f} min/mile")
+        
+        # Recategorize segments based on the pace_limit
+        fast_segments = [s for s in reasonable_segments if s['pace'] <= float(pace_limit)]
+        slow_segments = [s for s in reasonable_segments if s['pace'] > float(pace_limit)]
+        
+        print(f"After filtering and recategorization: {len(fast_segments)} fast segments, {len(slow_segments)} slow segments")
+        
         # Calculate totals
         total_fast_distance = sum(s['distance'] for s in fast_segments)
         total_slow_distance = sum(s['distance'] for s in slow_segments)
         
-        # Calculate heart rate averages
-        fast_hr_values = [s['avg_hr'] for s in fast_segments if s['avg_hr'] > 0]
-        slow_hr_values = [s['avg_hr'] for s in slow_segments if s['avg_hr'] > 0]
+        # Calculate the TOTAL time for each segment type (not just averaging individual segments)
+        total_fast_time_minutes = sum((s['end_time'] - s['start_time']).total_seconds() / 60 for s in fast_segments)
+        total_slow_time_minutes = sum((s['end_time'] - s['start_time']).total_seconds() / 60 for s in slow_segments)
         
-        avg_hr_fast = sum(fast_hr_values) / len(fast_hr_values) if fast_hr_values else 0
-        avg_hr_slow = sum(slow_hr_values) / len(slow_hr_values) if slow_hr_values else 0
+        # Calculate TRUE average paces from total time / total distance
+        if total_fast_distance > 0:
+            avg_pace_fast = total_fast_time_minutes / total_fast_distance
+        else:
+            avg_pace_fast = 0
+            
+        if total_slow_distance > 0:
+            avg_pace_slow = total_slow_time_minutes / total_slow_distance
+        else:
+            avg_pace_slow = 0
+        
+        # Calculate average heart rate - weighted by TIME spent in each segment
+        if fast_segments:
+            fast_hr_totals = sum(s['avg_hr'] * (s['end_time'] - s['start_time']).total_seconds() 
+                               for s in fast_segments if s['avg_hr'] > 0)
+            fast_time_with_hr = sum((s['end_time'] - s['start_time']).total_seconds() 
+                                   for s in fast_segments if s['avg_hr'] > 0)
+            avg_hr_fast = fast_hr_totals / fast_time_with_hr if fast_time_with_hr > 0 else 0
+        else:
+            avg_hr_fast = 0
+            
+        if slow_segments:
+            slow_hr_totals = sum(s['avg_hr'] * (s['end_time'] - s['start_time']).total_seconds() 
+                               for s in slow_segments if s['avg_hr'] > 0)
+            slow_time_with_hr = sum((s['end_time'] - s['start_time']).total_seconds() 
+                                   for s in slow_segments if s['avg_hr'] > 0)
+            avg_hr_slow = slow_hr_totals / slow_time_with_hr if slow_time_with_hr > 0 else 0
+        else:
+            avg_hr_slow = 0
+        
+        # Calculate total run time and overall average pace
+        if point_segments:
+            total_run_time_minutes = (point_segments[-1]['time'] - point_segments[0]['time']).total_seconds() / 60
+            overall_avg_pace = total_run_time_minutes / total_distance_all if total_distance_all > 0 else 0
+        else:
+            total_run_time_minutes = 0
+            overall_avg_pace = 0
+            
+        # Calculate average heart rate for the entire run
         avg_hr_all = sum(all_heart_rates) / len(all_heart_rates) if all_heart_rates else 0
         
         # Debug output
         print(f"\nAnalysis complete:")
         print(f"Total distance: {total_distance_all:.2f} miles")
-        print(f"Fast distance: {total_fast_distance:.2f} miles")
-        print(f"Slow distance: {total_slow_distance:.2f} miles")
+        print(f"Total time: {total_run_time_minutes:.2f} minutes")
+        print(f"Overall average pace: {overall_avg_pace:.2f} min/mile")
+        print(f"Fast distance: {total_fast_distance:.2f} miles (time: {total_fast_time_minutes:.2f} min)")
+        print(f"Fast average pace: {avg_pace_fast:.2f} min/mile")
+        print(f"Slow distance: {total_slow_distance:.2f} miles (time: {total_slow_time_minutes:.2f} min)")
+        print(f"Slow average pace: {avg_pace_slow:.2f} min/mile")
         print(f"Average HR (All): {avg_hr_all:.0f} bpm")
         print(f"Average HR (Fast): {avg_hr_fast:.0f} bpm")
         print(f"Average HR (Slow): {avg_hr_slow:.0f} bpm")
@@ -675,7 +737,7 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None, weig
         # Calculate the average time between heart rate samples in seconds
         if len(point_segments) >= 2:
             total_time_seconds = (point_segments[-1]['time'] - point_segments[0]['time']).total_seconds()
-            hr_sample_interval = total_time_seconds / len(all_heart_rates)
+            hr_sample_interval = total_time_seconds / len(all_heart_rates) if all_heart_rates else 1.0
             print(f"Heart rate sampling interval: {hr_sample_interval:.2f} seconds")
         else:
             hr_sample_interval = 1.0  # Default to 1 second if we can't calculate
@@ -730,13 +792,19 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None, weig
 
         return {
             'total_distance': total_distance_all,
+            'total_time_minutes': total_run_time_minutes,
+            'overall_avg_pace': overall_avg_pace,
             'fast_distance': total_fast_distance,
+            'fast_time_minutes': total_fast_time_minutes,
             'slow_distance': total_slow_distance,
+            'slow_time_minutes': total_slow_time_minutes,
             'percentage_fast': (total_fast_distance/total_distance_all)*100 if total_distance_all > 0 else 0,
             'percentage_slow': (total_slow_distance/total_distance_all)*100 if total_distance_all > 0 else 0,
             'avg_hr_all': avg_hr_all,
             'avg_hr_fast': avg_hr_fast,
             'avg_hr_slow': avg_hr_slow,
+            'avg_pace_fast': avg_pace_fast,
+            'avg_pace_slow': avg_pace_slow,
             'fast_segments': fast_segments,
             'slow_segments': slow_segments,
             'route_data': route_data,
@@ -761,7 +829,7 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None, weig
         traceback.print_exc()
         raise Exception(f"Failed to analyze run: {str(e)}")
 
-def finalize_segment(segment):
+def finalize_segment(segment, minimum_pace=3.0, maximum_pace=20.0):
     """Helper function to calculate segment statistics"""
     points = segment['points']
     time_diff = (points[-1]['time'] - segment['start_time']).total_seconds() / 60
@@ -771,24 +839,17 @@ def finalize_segment(segment):
         print(f"Warning: Invalid coordinates in segment")
         return None
     
-    # Calculate pace with safeguards against tiny distances
-    if segment['distance'] > 0.005:  # Only trust distance if it's large enough
-        pace = time_diff / segment['distance']
-    else:
-        # For very small distances, calculate speed from raw coordinates instead
-        # and smooth over the entire segment
-        total_dist = 0
-        for i in range(1, len(points)):
-            if 'lat' in points[i] and 'lon' in points[i] and 'lat' in points[i-1] and 'lon' in points[i-1]:
-                point_dist = haversine(points[i-1]['lat'], points[i-1]['lon'], 
-                                      points[i]['lat'], points[i]['lon'])
-                total_dist += point_dist
-        
-        # Recalculate with the aggregated distance if it's more reliable
-        if total_dist > segment['distance']:
-            pace = time_diff / total_dist
-        else:
-            pace = time_diff / max(segment['distance'], 0.001)  # Prevent division by zero or tiny values
+    # Calculate pace directly from total time and total distance
+    # This approach is more reliable than averaging individual point paces
+    pace = time_diff / segment['distance'] if segment['distance'] > 0 else float('inf')
+    
+    # Apply sanity limits to pace values
+    if pace < minimum_pace and segment['distance'] > 0.05:  # Only enforce minimum for substantial segments
+        print(f"Warning: Unrealistic fast pace detected ({pace:.2f}), adjusting to {minimum_pace}")
+        pace = minimum_pace
+    elif pace > maximum_pace:
+        print(f"Warning: Unrealistic slow pace detected ({pace:.2f}), adjusting to {maximum_pace}")
+        pace = maximum_pace
     
     # Handle heart rate data safely
     avg_hr = 0
@@ -799,7 +860,7 @@ def finalize_segment(segment):
     
     # Create the segment with properly handling Infinity values
     result = {
-        'is_fast': segment['is_fast'],
+        'is_fast': segment['is_fast'],  # Keep original classification
         'start_time': segment['start_time'],
         'end_time': points[-1]['time'],
         'distance': segment['distance'],
@@ -813,6 +874,9 @@ def finalize_segment(segment):
         'start_point': segment['coordinates'][0],
         'end_point': segment['coordinates'][-1]
     }
+    
+    # Recalculate is_fast based on the final calculated pace
+    # result['is_fast'] = pace <= float(pace_limit) if pace != float('inf') else False
     
     # Add best_pace field (needed for compatibility with existing code)
     result['best_pace'] = pace
@@ -1043,9 +1107,38 @@ def calculate_training_zones(heart_rates, user_age, resting_hr, hr_sample_interv
     if not heart_rates or not user_age or not resting_hr:
         print("Missing required data for training zones")
         return None
+    
+    # Remove outlier heart rates (values that are too low or too high)
+    filtered_heart_rates = []
+    if heart_rates:
+        avg_hr = sum(heart_rates) / len(heart_rates)
+        std_dev = (sum((hr - avg_hr) ** 2 for hr in heart_rates) / len(heart_rates)) ** 0.5
+        filtered_heart_rates = [hr for hr in heart_rates if abs(hr - avg_hr) <= 2.5 * std_dev]
         
-    # Calculate max HR using common formula
-    max_hr = 220 - user_age
+        # If filtering removed too many values, revert to original
+        if len(filtered_heart_rates) < len(heart_rates) * 0.8:
+            filtered_heart_rates = heart_rates
+            print(f"Heart rate filtering reverted - too many outliers")
+        else:
+            print(f"Filtered heart rates: removed {len(heart_rates) - len(filtered_heart_rates)} outliers")
+    
+    # Use filtered values
+    heart_rates = filtered_heart_rates if filtered_heart_rates else heart_rates
+        
+    # Calculate max HR using common formula (Tanaka formula is more accurate for older adults)
+    if user_age >= 40:
+        max_hr = 208 - (0.7 * user_age)  # Tanaka formula
+    else:
+        max_hr = 220 - user_age  # Traditional formula
+    
+    # If we have enough HR data, use the 95th percentile as max HR instead of formula
+    if len(heart_rates) > 100:  # Only if we have sufficient data
+        measured_max_hr = sorted(heart_rates)[-int(len(heart_rates) * 0.05)]  # 95th percentile
+        # Only use measured if it's reasonable
+        if measured_max_hr > max_hr * 0.9 and measured_max_hr < max_hr * 1.1:
+            max_hr = measured_max_hr
+            print(f"Using measured max HR: {max_hr}")
+    
     heart_rate_reserve = max_hr - resting_hr
     
     print(f"Max HR: {max_hr}")
@@ -1067,11 +1160,28 @@ def calculate_training_zones(heart_rates, user_age, resting_hr, hr_sample_interv
     for hr in heart_rates:
         hrr_percentage = (hr - resting_hr) / heart_rate_reserve
         
+        # Handle values outside the normal range
+        if hrr_percentage < 0:
+            hrr_percentage = 0
+        elif hrr_percentage > 1:
+            hrr_percentage = 1
+            
+        found_zone = False
         for zone_name, zone_data in zones.items():
             if zone_data['range'][0] <= hrr_percentage <= zone_data['range'][1]:
-                zone_data['time_spent'] += hr_sample_interval  # Use actual time interval between samples
+                zone_data['time_spent'] += hr_sample_interval
                 zone_data['count'] += 1
+                found_zone = True
                 break
+        
+        # Handle the case where the HR doesn't fall into any zone
+        if not found_zone:
+            # Find the closest zone
+            closest_zone = min(zones.items(), 
+                            key=lambda x: min(abs(x[1]['range'][0] - hrr_percentage), 
+                                            abs(x[1]['range'][1] - hrr_percentage)))
+            zones[closest_zone[0]]['time_spent'] += hr_sample_interval
+            zones[closest_zone[0]]['count'] += 1
     
     # Convert seconds to minutes and calculate percentages
     total_time = sum(zone['time_spent'] for zone in zones.values())
