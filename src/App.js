@@ -745,7 +745,25 @@ const SuccessMessage = ({ message }) => (
 // Add this helper function near the top of your file
 const calculateAveragePace = (segments) => {
   if (!segments || segments.length === 0) return 0;
-  return segments.reduce((sum, segment) => sum + segment.pace, 0) / segments.length;
+  
+  // First filter out any segments with Infinity pace values
+  const filteredSegments = segments.filter(segment => 
+    isFinite(segment.pace) && isFinite(segment.distance)
+  );
+  
+  if (filteredSegments.length === 0) return 0;
+  
+  // Calculate weighted average by distance
+  let totalDistance = 0;
+  let totalTime = 0;
+  
+  for (const segment of filteredSegments) {
+    totalDistance += segment.distance;
+    totalTime += segment.distance * segment.pace;
+  }
+  
+  if (totalDistance === 0) return 0;
+  return totalTime / totalDistance;
 };
 
 // Helper function to extract pace values from results
@@ -782,15 +800,8 @@ const extractPaceValue = (results, paceType) => {
     
     // Calculate from segments if available
     if (results.slow_segments && results.slow_segments.length > 0) {
-      const segmentPaces = results.slow_segments
-        .map(s => s.pace)
-        .filter(pace => isFinite(pace) && pace > 0);
-      
-      if (segmentPaces.length > 0) {
-        const avgPace = segmentPaces.reduce((sum, pace) => sum + pace, 0) / segmentPaces.length;
-        console.log("Calculated slow pace from segments:", avgPace);
-        return avgPace;
-      }
+      // Use the weighted average method instead of simple average
+      return calculateAveragePace(results.slow_segments);
     }
     
     // Last resort - if we have overall pace and fast pace, estimate slow pace
@@ -1309,30 +1320,35 @@ function App() {
       const response = await fetch(`${API_URL}/analyze`, {
         method: 'POST',
         body: formData,
-        credentials: 'include'
       });
       
       console.log('Response status:', response.status);
       
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to analyze the run');
+        const errorText = await response.text();
+        throw new Error(`Failed to analyze the run: ${errorText}`);
       }
       
+      // Get the response
       const data = await response.json();
+      
+      if (!data) {
+        throw new Error('Empty response from the server');
+      }
+      
       console.log('Analysis results received:', data);
       
       // Store the results
-      setResults(data.data);
-      setAnalysisVisible(true);  // Ensure analysis section is visible
-      setSaveStatus(data.saved ? 'Run saved successfully!' : '');
-      
-      // Update run history after saving
-      await fetchRunHistory();
-      
+      setResults(data);
+      setAnalysisVisible(true);
+        
+      // Save run to history
+      if (userId) {
+        handleSaveRun(data);
+      }
     } catch (error) {
       console.error('Error during analysis:', error);
-      setError(`Failed to analyze the run: ${error.message}`);
+      setError(error.toString());
     } finally {
       setLoading(false);
     }

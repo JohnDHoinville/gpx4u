@@ -1,6 +1,5 @@
 /**
- * Safely parses JSON that may contain Infinity, -Infinity, or NaN values
- * which are not natively supported in the JSON specification.
+ * Safely parses JSON with basic error handling
  * 
  * @param {string} jsonString - The JSON string to parse
  * @returns {object|null} The parsed object or null if parsing fails
@@ -12,63 +11,14 @@ export const safelyParseJSON = (jsonString) => {
       return null;
     }
 
-    // Make sure we're working with a string
+    // If it's already an object, just return it
     if (typeof jsonString !== 'string') {
-      console.error("Expected string input for JSON parsing");
-      return jsonString; // Return as-is if it's already an object
+      return jsonString;
     }
 
-    // First approach - handle quoted Infinity values
-    try {
-      // Find unquoted Infinity values and quote them
-      let sanitized = jsonString
-        .replace(/:\s*Infinity/g, ':"Infinity"')
-        .replace(/:\s*-Infinity/g, ':"Infinity"')
-        .replace(/:\s*NaN/g, ':null')
-        // Handle case where Infinity is the value in an array
-        .replace(/,\s*Infinity/g, ',"Infinity"')
-        .replace(/,\s*-Infinity/g, ',"-Infinity"')
-        .replace(/,\s*NaN/g, ',null')
-        // Handle case where Infinity is the first value in an array
-        .replace(/\[\s*Infinity/g, '["Infinity"')
-        .replace(/\[\s*-Infinity/g, '["Infinity"')
-        .replace(/\[\s*NaN/g, '[null');
-      
-      return JSON.parse(sanitized, (key, value) => {
-        if (value === "Infinity") return Infinity;
-        if (value === "-Infinity") return -Infinity;
-        return value;
-      });
-    } catch (firstError) {
-      // If first approach fails, try more aggressive replacement
-      console.warn("First JSON parse approach failed:", firstError.message);
-      
-      try {
-        // More aggressive replacements
-        const sanitized = jsonString
-          .replace(/Infinity/g, '"Infinity"')
-          .replace(/-Infinity/g, '"-Infinity"')
-          .replace(/NaN/g, 'null')
-          // Fix double quotes
-          .replace(/""/g, '"')
-          // Fix invalid JSON that might be created
-          .replace(/":"/g, '":"')
-          .replace(/"[:,]/g, '":');
-        
-        return JSON.parse(sanitized, (key, value) => {
-          if (value === "Infinity") return Infinity;
-          if (value === "-Infinity") return -Infinity;
-          return value;
-        });
-      } catch (secondError) {
-        // If all else fails, log error details and return null
-        console.error("JSON parsing failed:", secondError);
-        console.error("Problematic JSON:", jsonString.substring(0, 200) + "...");
-        return null;
-      }
-    }
-  } catch (e) {
-    console.error("Error in safelyParseJSON:", e);
+    return JSON.parse(jsonString);
+  } catch (error) {
+    console.error("JSON parsing error:", error.message);
     return null;
   }
 };
@@ -79,12 +29,8 @@ export const safelyParseJSON = (jsonString) => {
  * @returns {string} Formatted pace as mm:ss
  */
 export const formatPace = (pace) => {
-  if (pace === null || pace === undefined || isNaN(pace)) {
+  if (pace === null || pace === undefined || !isFinite(pace)) {
     return 'N/A';
-  }
-  
-  if (pace === Infinity || pace === -Infinity) {
-    return pace === Infinity ? '∞' : '-∞';
   }
   
   // Convert to minutes and seconds
