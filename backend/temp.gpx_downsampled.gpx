@@ -1516,8 +1516,6 @@
      <ns0:power>171</ns0:power><ns2:TrackPointExtension>
       <ns2:hr>171</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8663950" lon="-85.7332390"><ns0:ele>212.0</ns0:ele><ns0:time>2025-03-29T12:26:22Z</ns0:time><ns0:extensions>
      <ns0:power>171</ns0:power><ns2:TrackPointExtension>
-      <ns2:hr>171</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8663700" lon="-85.7332380"><ns0:ele>212.0</ns0:ele><ns0:time>2025-03-29T12:26:23Z</ns0:time><ns0:extensions>
-     <ns0:power>170</ns0:power><ns2:TrackPointExtension>
       <ns2:hr>171</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8663330" lon="-85.7332370"><ns0:ele>212.0</ns0:ele><ns0:time>2025-03-29T12:26:24Z</ns0:time><ns0:extensions>
      <ns0:power>170</ns0:power><ns2:TrackPointExtension>
       <ns2:hr>172</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8663200" lon="-85.7332370"><ns0:ele>212.0</ns0:ele><ns0:time>2025-03-29T12:26:25Z</ns0:time><ns0:extensions>
@@ -4660,7 +4658,17 @@
      <ns0:power>168</ns0:power><ns2:TrackPointExtension>
       <ns2:hr>174</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8269260" lon="-85.7352510"><ns0:ele>216.2</ns0:ele><ns0:time>2025-03-29T12:52:44Z</ns0:time><ns0:extensions>
      <ns0:power>169</ns0:power><ns2:TrackPointExtension>
-      <ns2:hr>174</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8268100" lon="-85.7352660"><ns0:ele>216.4</ns0:ele><ns0:time>2025-03-29T12:52:51Z</ns0:time><ns0:extensions>
+      <ns2:hr>174</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8268850" lon="-85.7352510"><ns0:ele>216.4</ns0:ele><ns0:time>2025-03-29T12:52:46Z</ns0:time><ns0:extensions>
+     <ns0:power>162</ns0:power><ns2:TrackPointExtension>
+      <ns2:hr>174</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8268600" lon="-85.7352570"><ns0:ele>216.4</ns0:ele><ns0:time>2025-03-29T12:52:47Z</ns0:time><ns0:extensions>
+     <ns0:power>162</ns0:power><ns2:TrackPointExtension>
+      <ns2:hr>174</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8268520" lon="-85.7352600"><ns0:ele>216.4</ns0:ele><ns0:time>2025-03-29T12:52:48Z</ns0:time><ns0:extensions>
+     <ns0:power>162</ns0:power><ns2:TrackPointExtension>
+      <ns2:hr>174</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8268440" lon="-85.7352620"><ns0:ele>216.4</ns0:ele><ns0:time>2025-03-29T12:52:49Z</ns0:time><ns0:extensions>
+     <ns0:power>100</ns0:power><ns2:TrackPointExtension>
+      <ns2:hr>175</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8268200" lon="-85.7352660"><ns0:ele>216.4</ns0:ele><ns0:time>2025-03-29T12:52:50Z</ns0:time><ns0:extensions>
+     <ns0:power>100</ns0:power><ns2:TrackPointExtension>
+      <ns2:hr>175</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8268100" lon="-85.7352660"><ns0:ele>216.4</ns0:ele><ns0:time>2025-03-29T12:52:51Z</ns0:time><ns0:extensions>
      <ns0:power>139</ns0:power><ns2:TrackPointExtension>
       <ns2:hr>175</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8267660" lon="-85.7352660"><ns0:ele>216.4</ns0:ele><ns0:time>2025-03-29T12:52:52Z</ns0:time><ns0:extensions>
      <ns0:power>139</ns0:power><ns2:TrackPointExtension>
@@ -5516,8 +5524,6 @@
      <ns0:power>167</ns0:power><ns2:TrackPointExtension>
       <ns2:hr>173</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8166760" lon="-85.7317190"><ns0:ele>226.8</ns0:ele><ns0:time>2025-03-29T12:59:58Z</ns0:time><ns0:extensions>
      <ns0:power>167</ns0:power><ns2:TrackPointExtension>
-      <ns2:hr>173</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8166530" lon="-85.7317040"><ns0:ele>226.6</ns0:ele><ns0:time>2025-03-29T12:59:59Z</ns0:time><ns0:extensions>
-     <ns0:power>169</ns0:power><ns2:TrackPointExtension>
       <ns2:hr>173</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8166180" lon="-85.7316810"><ns0:ele>226.6</ns0:ele><ns0:time>2025-03-29T13:00:00Z</ns0:time><ns0:extensions>
      <ns0:power>169</ns0:power><ns2:TrackPointExtension>
       <ns2:hr>174</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8166060" lon="-85.7316740"><ns0:ele>226.6</ns0:ele><ns0:time>2025-03-29T13:00:01Z</ns0:time><ns0:extensions>
@@ -8784,6 +8790,10 @@
      <ns0:power>179</ns0:power><ns2:TrackPointExtension>
       <ns2:hr>180</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8508610" lon="-85.7329720"><ns0:ele>210.4</ns0:ele><ns0:time>2025-03-29T13:27:16Z</ns0:time><ns0:extensions>
      <ns0:power>179</ns0:power><ns2:TrackPointExtension>
+      <ns2:hr>180</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8508870" lon="-85.7329750"><ns0:ele>210.4</ns0:ele><ns0:time>2025-03-29T13:27:17Z</ns0:time><ns0:extensions>
+     <ns0:power>179</ns0:power><ns2:TrackPointExtension>
+      <ns2:hr>180</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8508870" lon="-85.7329750"><ns0:ele>210.4</ns0:ele><ns0:time>2025-03-29T13:27:18Z</ns0:time><ns0:extensions>
+     <ns0:power>179</ns0:power><ns2:TrackPointExtension>
       <ns2:hr>180</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8509310" lon="-85.7329820"><ns0:ele>210.6</ns0:ele><ns0:time>2025-03-29T13:27:19Z</ns0:time><ns0:extensions>
      <ns0:power>179</ns0:power><ns2:TrackPointExtension>
       <ns2:hr>180</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8509480" lon="-85.7329850"><ns0:ele>210.6</ns0:ele><ns0:time>2025-03-29T13:27:20Z</ns0:time><ns0:extensions>
@@ -11014,8 +11024,6 @@
      <ns0:power>186</ns0:power><ns2:TrackPointExtension>
       <ns2:hr>178</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8830820" lon="-85.7337790"><ns0:ele>199.0</ns0:ele><ns0:time>2025-03-29T13:46:03Z</ns0:time><ns0:extensions>
      <ns0:power>186</ns0:power><ns2:TrackPointExtension>
-      <ns2:hr>178</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8831050" lon="-85.7337930"><ns0:ele>199.0</ns0:ele><ns0:time>2025-03-29T13:46:04Z</ns0:time><ns0:extensions>
-     <ns0:power>187</ns0:power><ns2:TrackPointExtension>
       <ns2:hr>178</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt><ns0:trkpt lat="42.8831050" lon="-85.7337930"><ns0:ele>199.0</ns0:ele><ns0:time>2025-03-29T13:46:05Z</ns0:time><ns0:extensions>
      <ns2:TrackPointExtension>
       <ns2:hr>178</ns2:hr></ns2:TrackPointExtension></ns0:extensions></ns0:trkpt></ns0:trkseg></ns0:trk></ns0:gpx>

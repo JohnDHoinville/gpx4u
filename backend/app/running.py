@@ -164,6 +164,13 @@ def downsample_gpx_smart(input_gpx_file, output_gpx_file, min_time_gap=3, pace_l
         
         print(f"Original file has {len(track_points)} trackpoints")
         
+        # Adjust min_time_gap based on file frequency
+        # If extremely high frequency (more than 1 point per second), be more aggressive
+        points_per_minute = len(track_points) / 30  # Estimate for first 30 minutes
+        if points_per_minute > 60:  # More than 1 point per second
+            min_time_gap = max(min_time_gap, 5)  # Increase minimum time gap
+            print(f"High frequency file detected, increasing minimum time gap to {min_time_gap} seconds")
+        
         # Extract data for all points with pace calculation
         point_data = []
         previous_point = None
@@ -214,7 +221,7 @@ def downsample_gpx_smart(input_gpx_file, output_gpx_file, min_time_gap=3, pace_l
                         
                         # Check if this point represents a pace transition
                         if pace_limit:
-                            current_pace_status = pace <= pace_limit
+                            current_pace_status = pace <= float(pace_limit)
                             
                             if previous_point.get('pace_status') is not None:
                                 previous_pace_status = previous_point['pace_status']
@@ -306,6 +313,35 @@ def downsample_gpx_smart(input_gpx_file, output_gpx_file, min_time_gap=3, pace_l
         # Sort indices to keep original order
         points_to_keep = sorted(set(points_to_keep))
         
+        # For extremely high-frequency files, add further filtering 
+        # if we're still keeping too many points
+        if len(points_to_keep) > len(track_points) * 0.5:  # If keeping more than 50% of points
+            print("Still keeping too many points, applying additional filtering")
+            filtered_points = [points_to_keep[0]]  # Always keep first point
+            
+            # Keep only every Nth point except for pace transitions
+            keep_every_n = 2
+            transition_points = set()
+            
+            # Identify transition points
+            for i in range(1, len(point_data) - 1):
+                if point_data[i]['is_pace_transition']:
+                    transition_points.add(point_data[i]['index'])
+                    if i > 0:
+                        transition_points.add(point_data[i-1]['index'])
+                    if i < len(point_data)-1:
+                        transition_points.add(point_data[i+1]['index'])
+            
+            # Filter points, keeping important ones
+            for i in range(1, len(points_to_keep)-1):  # Skip first and last
+                idx = points_to_keep[i]
+                if idx in transition_points or i % keep_every_n == 0:
+                    filtered_points.append(idx)
+            
+            # Always keep last point
+            filtered_points.append(points_to_keep[-1])
+            points_to_keep = filtered_points
+        
         # Create a new GPX tree with only the kept points
         new_root = ET.Element(root.tag, root.attrib)
         
@@ -385,7 +421,10 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None, weig
         print(f"Additional metrics - Weight: {weight} (entered in lbs), Gender: {gender}")
         
         # Check if file needs downsampling
-        if needs_downsampling(file_path, threshold_points_per_minute=20, sample_minutes=2):
+        is_high_frequency = needs_downsampling(file_path, threshold_points_per_minute=20, sample_minutes=2)
+        print(f"High-frequency detection result: {is_high_frequency}")
+        
+        if is_high_frequency:
             print("High-frequency file detected, downsampling...")
             downsampled_path = f"{file_path}_downsampled.gpx"
             
@@ -491,7 +530,13 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None, weig
                         total_distance_all += distance
                         
                         if time_diff > 0:
-                            pace = time_diff / distance if distance > 0 else float('inf')
+                            # Calculate pace with safeguards for high-frequency files
+                            if is_high_frequency and distance < 0.001:
+                                # For very small distances in high-frequency files,
+                                # use a moving average or skip individual pace calculations
+                                pace = float('inf')  # We'll calculate this later in aggregation
+                            else:
+                                pace = time_diff / distance if distance > 0 else float('inf')
                             
                             point_segment = {
                                 'lat': lat,
@@ -556,16 +601,32 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None, weig
             if next_point and next_point['is_fast'] != current_segment['is_fast']:
                 # Ensure the segment has valid coordinates
                 if len(current_segment['coordinates']) >= 2:
-                    segments.append(finalize_segment(current_segment))
+                    finalized_segment = finalize_segment(current_segment)
+                    if finalized_segment:  # Only add if finalize_segment returns a valid result
+                        segments.append(finalized_segment)
                 current_segment = None
         
         # Add final segment if it has enough points
         if current_segment and len(current_segment['coordinates']) >= 2:
-            segments.append(finalize_segment(current_segment))
+            finalized_segment = finalize_segment(current_segment)
+            if finalized_segment:  # Only add if finalize_segment returns a valid result
+                segments.append(finalized_segment)
         
         # Split into fast and slow segments, ensuring each has valid coordinates
         fast_segments = [s for s in segments if s['is_fast'] and len(s['coordinates']) >= 2]
         slow_segments = [s for s in segments if not s['is_fast'] and len(s['coordinates']) >= 2]
+        
+        # Aggregating segments for high-frequency files
+        if is_high_frequency:
+            print("High-frequency file confirmed, aggregating short segments...")
+            try:
+                fast_segments = aggregate_short_segments(fast_segments, min_distance_threshold=0.01, min_time_threshold=5)
+                slow_segments = aggregate_short_segments(slow_segments, min_distance_threshold=0.01, min_time_threshold=5)
+                print(f"After aggregation: {len(fast_segments)} fast segments, {len(slow_segments)} slow segments")
+            except Exception as agg_error:
+                print(f"Error during segment aggregation: {str(agg_error)}")
+                print(f"Continuing with original segments")
+                traceback.print_exc()
         
         # Calculate totals
         total_fast_distance = sum(s['distance'] for s in fast_segments)
@@ -689,7 +750,8 @@ def analyze_run_file(file_path, pace_limit, user_age=None, resting_hr=None, weig
             'recovery_time': recovery_time,
             'race_predictions': race_predictions,
             'max_hr': max_hr,
-            'creator': creator
+            'creator': creator,
+            'is_high_frequency': is_high_frequency
         }
         
     except Exception as e:
@@ -709,8 +771,31 @@ def finalize_segment(segment):
         print(f"Warning: Invalid coordinates in segment")
         return None
     
-    # Calculate pace
-    pace = time_diff / segment['distance'] if segment['distance'] > 0 else float('inf')
+    # Calculate pace with safeguards against tiny distances
+    if segment['distance'] > 0.005:  # Only trust distance if it's large enough
+        pace = time_diff / segment['distance']
+    else:
+        # For very small distances, calculate speed from raw coordinates instead
+        # and smooth over the entire segment
+        total_dist = 0
+        for i in range(1, len(points)):
+            if 'lat' in points[i] and 'lon' in points[i] and 'lat' in points[i-1] and 'lon' in points[i-1]:
+                point_dist = haversine(points[i-1]['lat'], points[i-1]['lon'], 
+                                      points[i]['lat'], points[i]['lon'])
+                total_dist += point_dist
+        
+        # Recalculate with the aggregated distance if it's more reliable
+        if total_dist > segment['distance']:
+            pace = time_diff / total_dist
+        else:
+            pace = time_diff / max(segment['distance'], 0.001)  # Prevent division by zero or tiny values
+    
+    # Handle heart rate data safely
+    avg_hr = 0
+    if segment.get('hr_count', 0) > 0 and segment.get('total_hr', 0) > 0:
+        avg_hr = segment['total_hr'] / segment['hr_count']
+    elif 'avg_hr' in segment:
+        avg_hr = segment['avg_hr']
     
     # Create the segment with properly handling Infinity values
     result = {
@@ -718,7 +803,9 @@ def finalize_segment(segment):
         'start_time': segment['start_time'],
         'end_time': points[-1]['time'],
         'distance': segment['distance'],
-        'avg_hr': segment['total_hr'] / segment['hr_count'] if segment['hr_count'] > 0 else 0,
+        'avg_hr': avg_hr,
+        'total_hr': segment.get('total_hr', 0),
+        'hr_count': segment.get('hr_count', 0),
         'coordinates': segment['coordinates'],
         'time_diff': time_diff,
         'pace': pace,
@@ -731,6 +818,120 @@ def finalize_segment(segment):
     result['best_pace'] = pace
     
     return result
+
+def aggregate_short_segments(segments, min_distance_threshold=0.01, min_time_threshold=5):
+    """
+    Aggregate short segments into more meaningful chunks.
+    
+    Args:
+        segments: List of segment dictionaries
+        min_distance_threshold: Minimum distance in miles for a segment (default 0.01 mile)
+        min_time_threshold: Minimum time in seconds for a segment (default 5 seconds)
+    
+    Returns:
+        List of aggregated segments
+    """
+    if not segments:
+        return []
+    
+    print(f"Aggregating segments. Input: {len(segments)} segments")
+    
+    # Initialize with the first segment
+    aggregated = []
+    current = segments[0].copy()
+    
+    # Ensure required fields exist in the current segment
+    if 'total_hr' not in current:
+        current['total_hr'] = current.get('avg_hr', 0) * current.get('hr_count', 1)
+    if 'hr_count' not in current:
+        current['hr_count'] = 1 if current.get('avg_hr', 0) > 0 else 0
+    
+    # Track cumulative data for pace calculation
+    cumulative_distance = current['distance']
+    cumulative_time_seconds = (current['end_time'] - current['start_time']).total_seconds()
+    
+    for i in range(1, len(segments)):
+        next_segment = segments[i]
+        
+        # Check if current segment is too short
+        current_distance = current['distance']
+        current_time_diff = (current['end_time'] - current['start_time']).total_seconds()
+        
+        if current_distance < min_distance_threshold or current_time_diff < min_time_threshold:
+            # Merge the next segment into the current one
+            current['end_time'] = next_segment['end_time']
+            current['distance'] += next_segment['distance']
+            current['coordinates'].extend(next_segment['coordinates'][1:])  # Avoid duplicating the connecting point
+            
+            # Update cumulative data for pace calculation
+            cumulative_distance += next_segment['distance']
+            segment_time = (next_segment['end_time'] - next_segment['start_time']).total_seconds()
+            cumulative_time_seconds += segment_time
+            
+            # Safely merge HR data
+            next_total_hr = 0
+            next_hr_count = 0
+            
+            # Calculate next segment's total HR if needed
+            if 'total_hr' in next_segment:
+                next_total_hr = next_segment['total_hr']
+            elif 'avg_hr' in next_segment and next_segment['avg_hr'] > 0:
+                next_hr_count = next_segment.get('hr_count', 1)
+                next_total_hr = next_segment['avg_hr'] * next_hr_count
+            
+            # Update current segment's HR data
+            current['total_hr'] += next_total_hr
+            current['hr_count'] += next_segment.get('hr_count', next_hr_count)
+            
+            # Update time difference
+            current['time_diff'] = cumulative_time_seconds / 60  # Convert seconds to minutes
+            
+            # Recalculate pace from cumulative data
+            if cumulative_distance > 0:
+                current['pace'] = (cumulative_time_seconds / 60) / cumulative_distance
+                current['best_pace'] = current['pace']
+            
+            # Update end point
+            current['end_point'] = next_segment['end_point']
+        else:
+            # Current segment is large enough, save it and start a new one
+            aggregated.append(current)
+            current = next_segment.copy()
+            
+            # Reset cumulative tracking for new segment
+            cumulative_distance = current['distance']
+            cumulative_time_seconds = (current['end_time'] - current['start_time']).total_seconds()
+            
+            # Ensure required fields exist in the new current segment
+            if 'total_hr' not in current:
+                current['total_hr'] = current.get('avg_hr', 0) * current.get('hr_count', 1)
+            if 'hr_count' not in current:
+                current['hr_count'] = 1 if current.get('avg_hr', 0) > 0 else 0
+    
+    # Add the last segment
+    if current:
+        current_distance = current['distance']
+        current_time_diff = (current['end_time'] - current['start_time']).total_seconds()
+        
+        # Only add if it meets the thresholds
+        if current_distance >= min_distance_threshold and current_time_diff >= min_time_threshold:
+            aggregated.append(current)
+    
+    # Final pass: calculate avg_hr for all segments and validate paces
+    for segment in aggregated:
+        if segment['hr_count'] > 0:
+            segment['avg_hr'] = segment['total_hr'] / segment['hr_count']
+        
+        # Validate pace - ensure it's not unreasonably fast
+        if segment['pace'] < 3.0:  # Faster than 3:00/mile is likely an error
+            # Recalculate from time and distance
+            time_minutes = (segment['end_time'] - segment['start_time']).total_seconds() / 60
+            if segment['distance'] > 0 and time_minutes > 0:
+                segment['pace'] = time_minutes / segment['distance']
+                segment['best_pace'] = segment['pace']
+    
+    print(f"Aggregation complete. Output: {len(aggregated)} segments")
+    return aggregated
 
 def list_gpx_files(directory="~/Downloads"):
     # Expand the ~ to full home directory path

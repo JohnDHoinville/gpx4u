@@ -58,6 +58,17 @@ def analyze():
             
         print(f"Analysis parameters: pace_limit={pace_limit}, age={age}, resting_hr={resting_hr}")
         
+        # Check if this is a high-frequency file
+        is_high_frequency = needs_downsampling(file_path)
+        print(f"File detection: is_high_frequency={is_high_frequency}")
+        
+        if is_high_frequency:
+            print("Detected high-frequency file, downsampling...")
+            downsampled_path = os.path.join(temp_dir, "downsampled_" + file.filename)
+            downsample_gpx_smart(file_path, downsampled_path)
+            file_path = downsampled_path
+            print(f"Downsampling complete, using {file_path}")
+        
         # Analyze the run
         results = analyze_run_file(file_path, pace_limit, age, resting_hr, weight, gender)
         

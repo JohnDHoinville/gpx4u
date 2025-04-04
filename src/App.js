@@ -1330,25 +1330,59 @@ function App() {
         throw new Error(`Failed to analyze the run: ${errorText}`);
       }
       
-      // Get the response
-      const data = await response.json();
+      // Get the response as text first for debugging
+      const responseText = await response.text();
+      console.log('Raw response text (first 500 chars):', responseText.substring(0, 500));
       
-      if (!data) {
-        throw new Error('Empty response from the server');
+      // Try to parse the response text
+      let responseData;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('JSON parsing error:', parseError);
+        console.error('Parse error position:', parseError.position);
+        
+        // Try to identify the problematic part of the JSON
+        if (parseError.message.includes('position')) {
+          const position = parseInt(parseError.message.split('position')[1]);
+          const problematicPart = responseText.substring(
+            Math.max(0, position - 30),
+            Math.min(responseText.length, position + 30)
+          );
+          console.error('Problematic JSON part:', problematicPart);
+        }
+        
+        throw new Error(`Failed to parse response: ${parseError.message}`);
       }
       
-      console.log('Analysis results received:', data);
+      console.log('Raw API response:', responseData);
+      
+      // Extract the actual analysis data from the nested 'data' property
+      const analysisData = responseData.data || responseData;
+      
+      if (!analysisData) {
+        throw new Error('No analysis data found in the response');
+      }
+      
+      console.log('Extracted analysis data:', analysisData);
       
       // Store the results
-      setResults(data);
+      setResults(analysisData);
       setAnalysisVisible(true);
         
       // Save run to history
-      if (userId) {
-        handleSaveRun(data);
+      if (userId && responseData.run_id) {
+        // Run was already saved by the backend
+        console.log('Run was saved with ID:', responseData.run_id);
+        setSaveStatus('Run saved successfully!');
+        await fetchRunHistory();
+      } else if (userId) {
+        // Need to save the run manually
+        handleSaveRun(analysisData);
       }
     } catch (error) {
       console.error('Error during analysis:', error);
+      console.error('Error stack:', error.stack);
       setError(error.toString());
     } finally {
       setLoading(false);
@@ -2497,7 +2531,17 @@ function App() {
 
   // Add a helper function for safe number formatting
   const formatNumber = (value, decimals = 2) => {
-    return (value || 0).toFixed(decimals);
+    if (!value || value === null || value === undefined) {
+      return "0.00";
+    }
+
+    // For very small distances (less than 0.01), use 4 decimal places
+    if (typeof value === 'number' && value > 0 && value < 0.01) {
+      return value.toFixed(4);
+    }
+    
+    // Otherwise use standard formatting
+    return value.toFixed(decimals);
   };
 
   // Add this in your App.js component (after setting results)
